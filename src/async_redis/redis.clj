@@ -32,12 +32,11 @@
                           (wrap (.getBulkReply ~client)))))
 
 (defmacro ->double [client & body]
-  `((fn [client#]
+  `(let [client# ~client]
       (with-chan #(non-multi client#
                              ~@body
                              (let [ret# (.getBulkReply client#)]
-                               (if (nil? ret#) ret# (Double/valueOf ret#))))))
-    ~client))
+                               (if (nil? ret#) ret# (Double/valueOf ret#)))))))
 
 (defmacro ->list [client & body]
   `(with-chan #(non-multi ~client
@@ -190,6 +189,14 @@
 
 (defn watch [client & keys] (->status-multi client (.watch client keys)))
 (defn sort [client key] (->list client (.sort client key)))
+
+(defn blpop [client timeout & keys]
+  `(with-chan #(non-multi client
+                          (.blpop client (conj keys (str timeout)))
+                          (.setTimeoutInfinite client)
+                          (let [response (.getBulkReply client)]
+                            (.rollbackTimeout client)
+                            response))))
 
 (defn set [client key value] (->status client (.set client key value)))
 
