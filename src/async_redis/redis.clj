@@ -2,7 +2,7 @@
   (:refer-clojure :exclude [get type keys set sort])
   (:import (java.net.URI)
            (java.util HashSet LinkedHashSet)
-           (redis.clients.jedis Client JedisPubSub BuilderFactory Tuple)
+           (redis.clients.jedis Client JedisPubSub BuilderFactory Tuple SortingParams)
            (redis.clients.jedis.exceptions JedisDataException))
   (:require [clojure.core.async :as async :refer [go >! <! chan]]))
 
@@ -42,6 +42,15 @@
   `(with-chan #(non-multi ~client
                           ~@body
                           (wrap (.getMultiBulkReply ~client)))))
+
+(defmacro ->blocking:list [client & body]
+  `(let [client# ~client]
+     (with-chan #(non-multi client#
+                            ~@body
+                            (.setTimeoutInfinite client#)
+                            (let [response# (wrap (.getMultiBulkReply client#))]
+                              (.rollbackTimeout client#)
+                              response#)))))
 
 (defmacro ->int [client & body]
   `(with-chan #(non-multi ~client
@@ -188,15 +197,24 @@
 
 
 (defn watch [client & keys] (->status-multi client (.watch client keys)))
-(defn sort [client key] (->list client (.sort client key)))
 
-(defn blpop [client timeout & keys]
-  `(with-chan #(non-multi client
-                          (.blpop client (conj keys (str timeout)))
-                          (.setTimeoutInfinite client)
-                          (let [response (.getBulkReply client)]
-                            (.rollbackTimeout client)
-                            response))))
+(defmulti sort (fn [& args] [(nth args 2 false) (> (count args) 3)]))
+(defmethod sort [:false :false]
+  sort-simple [client key] (->list client (.sort client key)))
+(defmethod sort [:String :false]
+  sort-to-dest [client key dest-key] (->int client (.sort client key dest-key)))
+(defmethod sort [:SortingParams :false]
+  sort-with-params [client key sort-params] (->list client (.sort client key sort-params)))
+(defmethod sort [:SortingParams :true]
+  sort-with-params-to-dest [client key sort-params dest-key] (->int client (.sort client key sort-params dest-key)))
+
+(defmulti blpop (fn [client & args] (first args)))
+(defmethod blpop :Integer
+  blpop-timeout [client timeout & keys] (->blocking:list client (.blpop client (conj keys (str timeout)))))
+(defmethod blpop :String
+  blpop-timeout [client & keys] (->blocking:list client (.blpop client keys)))
+
+(defn brpop [client & keys] (->blocking:list client (.brpop keys)))
 
 (defn set [client key value] (->status client (.set client key value)))
 
