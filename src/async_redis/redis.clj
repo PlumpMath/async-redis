@@ -195,14 +195,6 @@
 (defn zcard [client key] (->int client (.zcard client key)))
 (defn zscore [client key member] (->double client (.zscore client key member)))
 
-(defmulti zcount (fn [client key min max] [client key min max]))
-(defmethod zcount [:Object :String :Double :Double]
-  zcount-doubles [client key min max]
-  (->int client (.zcount client key #^Double min #^Double max)))
-(defmethod zcount [:Object :String :String :String]
-  zcount-doubles [client key min max]
-  (->int client (.zcount client key #^String min #^String max)))
-
 (defn watch [client & keys] (->status-multi client (.watch client keys)))
 
 (defmulti sort (fn [& args] [(nth args 2 false) (> (count args) 3)]))
@@ -218,6 +210,22 @@
   blpop-timeout [client & keys] (->blocking:list client (.blpop client keys)))
 
 (defn brpop [client & keys] (->blocking:list client (.brpop keys)))
+
+(defmulti zcount (fn [client key min max] [client key min max]))
+(defmethod zcount [:Object :String :Double :Double]
+  zcount-doubles [client key min max]
+  (->int client (.zcount client key #^Double min #^Double max)))
+(defmethod zcount [:Object :String :String :String]
+  zcount-strings [client key min max]
+  (->int client (.zcount client key #^String min #^String max)))
+
+(defmulti zrange-by-score (fn [client key min max] [client key min max]))
+(defmethod zrange-by-score [:Object :String :Double :Double]
+  zrange-by-score-doubles [client key min max]
+  (->list>lset client (.zrangeByScore client key #^Double min #^Double max)))
+(defmethod zcount [:Object :String :String :String]
+  zrange-by-score-strings [client key min max]
+  (->list>lset client (.zrangeByScore client key #^String min #^String max)))
 
 (defn set [client key value] (->status client (.set client key value)))
 
