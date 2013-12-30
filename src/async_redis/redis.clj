@@ -337,19 +337,53 @@
 (defn config-set [client param val] (->status client (.configSet client param val)))
 
 (defn ^{:private true} get-eval-result [client]
-  (let [result (.getOne client)
-        ret (wrap (cond (isa? result byte[]) (SafeEncoder/encode result)
+  (let [result (.getOne client)]
+        (wrap (cond (isa? result byte[]) (SafeEncoder/encode result)
                         (seq? result) (map (fn [x] (if (nil? x) x (SafeEncoder/encode x)))
                                            result)
-                        :else result))]
-    (.rollbackTimeout client)
-    ret))
+                        :else result))))
 
-(defn eval [client script key-count & params]
-     (with-chan #(non-multi client
-                            (.setTimeoutInfinite client)
-                            (.eval client script key-count params)
-                            (get-eval-result client))))
+(defn ^{:private true} *eval [client script key-count & params]
+     (with-chan (fn []
+                  (.setTimeoutInfinite client)
+                  (.eval client script key-count params)
+                  (let [result (get-eval-result client)]
+                    (.rollbackTimeout client)
+                    result))))
+
+(defn ^{:private true} *evalsha [client sha1 key-count & params]
+     (with-chan (fn []
+                  (.setTimeoutInfinite client)
+                  (.evalsha client sha1 key-count params)
+                  (let [result (get-eval-result client)]
+                    (.rollbackTimeout client)
+                    result))))
+
+(defn eval-params [keys values] (into-array String (interleave keys values)))
+
+(defmulti eval (fn [client script & optional] (if (nil? optional) false (first optional))))
+(defmethod eval :false [client script] (*eval client script 0))
+(defmethod eval :Integer [& params] (apply *eval params))
+(defmethod eval :List<String> [client script keys params] (*eval client script (count keys) (eval-params params)))
+
+(defmulti evalsha (fn [client sha1 & optional] (if (nil? optional) false (first optional))))
+(defmethod evalsha :false [client sha1] (*evalsha client sha1 0))
+(defmethod evalsha :Integer [& params] (apply *evalsha params))
+(defmethod evalsha :List<String> [client sha1 keys params] (*evalsha client sha1 (count keys) (eval-params params)))
+
+(defn subscribe [client jedis-pub-sub & channels]
+  (with-chan (fn []
+               (.setTimeoutInfinite client)
+               (.proceed jedis-pub-sub client channels)
+               (.rollbackTimeout client))))
+
+(defn publish [client channel message] (->int client (.publish client channel message)))
+
+(defn psubscribe [client jedis-pub-sub & patterns]
+  (with-chan #(non-multi client
+                         (.setTimeoutInfinite client)
+                         (.proceedWithPatterns jedis-pub-sub client patterns)
+                         (.rollbackTimeout client))))
 
 (defn set [client key value] (->status client (.set client key value)))
 
