@@ -194,7 +194,14 @@
 (defn zrevrange-with-scores [client key start end] (->tupled-set client (.zrevrangeWithScores client key start end)))
 (defn zcard [client key] (->int client (.zcard client key)))
 (defn zscore [client key member] (->double client (.zscore client key member)))
-(defn zcount [client key min max] (->int client (.zcount client key min max)))
+
+(defmulti zcount (fn [client key min max] [client key min max]))
+(defmethod zcount [:Object :String :Double :Double]
+  zcount-doubles [client key min max]
+  (->int client (.zcount client key #^Double min #^Double max)))
+(defmethod zcount [:Object :String :String :String]
+  zcount-doubles [client key min max]
+  (->int client (.zcount client key #^String min #^String max)))
 
 (defn watch [client & keys] (->status-multi client (.watch client keys)))
 
