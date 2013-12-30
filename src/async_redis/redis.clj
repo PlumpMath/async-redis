@@ -239,17 +239,17 @@
 (defmethod zrange-by-score-with-scores [:Object :String :Double :Double]
   zrange-by-score-with-score-doubles [client key min max & optional]
   (if (empty? optional)
-    (->list>lset client (.zrangeByScoreWithScores client key #^Double min #^Double max))
+    (->tupled-set client (.zrangeByScoreWithScores client key #^Double min #^Double max))
     (let [offset (first optional)
           count (second optional)]
-      (->list>lset client (.zrangeByScoreWithScores client key #^Double min #^Double max offset count)))))
+      (->tupled-set client (.zrangeByScoreWithScores client key #^Double min #^Double max offset count)))))
 (defmethod zrange-by-score-with-scores [:Object :String :String :String]
   zrange-by-score-with-score-strings [client key min max & optional]
   (if (empty? optional)
-    (->list>lset client (.zrangeByScoreWithScores client key #^String min #^String max))
+    (->tupled-set client (.zrangeByScoreWithScores client key #^String min #^String max))
     (let [offset (first optional)
           count (second optional)]
-      (->list>lset client (.zrangeByScoreWithScores client key #^String min #^String max offset count)))))
+      (->tupled-set client (.zrangeByScoreWithScores client key #^String min #^String max offset count)))))
 
 (defn set [client key value] (->status client (.set client key value)))
 
