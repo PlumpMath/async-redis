@@ -194,19 +194,15 @@
 (defn zrevrange-with-scores [client key start end] (->tupled-set client (.zrevrangeWithScores client key start end)))
 (defn zcard [client key] (->int client (.zcard client key)))
 (defn zscore [client key member] (->double client (.zscore client key member)))
-
+(defn zcount [client key min max] (->int client (.zcount client key min max)))
 
 (defn watch [client & keys] (->status-multi client (.watch client keys)))
 
 (defmulti sort (fn [& args] [(nth args 2 false) (> (count args) 3)]))
-(defmethod sort [:false :false]
-  sort-simple [client key] (->list client (.sort client key)))
-(defmethod sort [:String :false]
-  sort-to-dest [client key dest-key] (->int client (.sort client key dest-key)))
-(defmethod sort [:SortingParams :false]
-  sort-with-params [client key sort-params] (->list client (.sort client key sort-params)))
-(defmethod sort [:SortingParams :true]
-  sort-with-params-to-dest [client key sort-params dest-key] (->int client (.sort client key sort-params dest-key)))
+(defmethod sort [:false :false] sort-simple [client key] (->list client (.sort client key)))
+(defmethod sort [:SortingParams :false] sort-with-params [client key sort-params] (->list client (.sort client key #^SortParams sort-params)))
+(defmethod sort [:String :false] sort-to-dest [client key dest-key] (->int client (.sort client key #^String dest-key)))
+(defmethod sort [:SortingParams :true] sort-with-params-to-dest [client key sort-params dest-key] (->int client (.sort client key sort-params dest-key)))
 
 (defmulti blpop (fn [client & args] (first args)))
 (defmethod blpop :Integer
