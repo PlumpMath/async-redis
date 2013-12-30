@@ -222,10 +222,18 @@
 (defmulti zrange-by-score (fn [client key min max & optional] [client key min max]))
 (defmethod zrange-by-score [:Object :String :Double :Double]
   zrange-by-score-doubles [client key min max & optional]
-  (->list>lset client (.zrangeByScore client key #^Double min #^Double max)))
+  (if (empty? optional)
+    (->list>lset client (.zrangeByScore client key #^Double min #^Double max))
+    (let [offset (first optional)
+          count (second optional)]
+      (->list>lset client (.zrangeByScore client key #^Double min #^Double max offset count)))))
 (defmethod zrange-by-score [:Object :String :String :String]
   zrange-by-score-strings [client key min max & optional]
-  (->list>lset client (.zrangeByScore client key #^String min #^String max)))
+  (if (empty? optional)
+    (->list>lset client (.zrangeByScore client key #^String min #^String max))
+    (let [offset (first optional)
+          count (second optional)]
+      (->list>lset client (.zrangeByScore client key #^String min #^String max offset count)))))
 
 (defn set [client key value] (->status client (.set client key value)))
 
