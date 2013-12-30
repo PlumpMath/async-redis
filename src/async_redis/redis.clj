@@ -1,8 +1,9 @@
 (ns async-redis.redis
-  (:refer-clojure :exclude [get type keys set sort])
+  (:refer-clojure :exclude [get type keys set sort eval])
   (:import (java.net.URI)
            (java.util HashSet LinkedHashSet)
            (redis.clients.jedis Client JedisPubSub BuilderFactory Tuple SortingParams)
+           (redis.clients.util SafeEncoder)
            (redis.clients.jedis.exceptions JedisDataException))
   (:require [clojure.core.async :as async :refer [go >! <! chan]]))
 
@@ -49,6 +50,15 @@
                             ~@body
                             (.setTimeoutInfinite client#)
                             (let [response# (wrap (.getMultiBulkReply client#))]
+                              (.rollbackTimeout client#)
+                              response#)))))
+
+(defmacro ->blocking:string [client & body]
+  `(let [client# ~client]
+     (with-chan #(non-multi client#
+                            ~@body
+                            (.setTimeoutInfinite client#)
+                            (let [response# (wrap (.getBulkReply client#))]
                               (.rollbackTimeout client#)
                               response#)))))
 
@@ -250,6 +260,96 @@
     (let [offset (first optional)
           count (second optional)]
       (->tupled-set client (.zrangeByScoreWithScores client key #^String min #^String max offset count)))))
+
+(defmulti zrevrange-by-score (fn [client key min max & optional] [client key min max]))
+(defmethod zrevrange-by-score [:Object :String :Double :Double]
+  zrevrange-by-score-doubles [client key min max & optional]
+  (if (empty? optional)
+    (->list>lset client (.zrevrangeByScore client key #^Double min #^Double max))
+    (let [offset (first optional)
+          count (second optional)]
+      (->list>lset client (.zrevrangeByScore client key #^Double min #^Double max offset count)))))
+(defmethod zrevrange-by-score [:Object :String :String :String]
+  zrevrange-by-score-strings [client key min max & optional]
+  (if (empty? optional)
+    (->list>lset client (.zrevrangeByScore client key #^String min #^String max))
+    (let [offset (first optional)
+          count (second optional)]
+      (->list>lset client (.zrevrangeByScore client key #^String min #^String max offset count)))))
+
+(defmulti zrevrange-by-score-with-scores (fn [client key min max & optional] [client key min max]))
+(defmethod zrevrange-by-score-with-scores [:Object :String :Double :Double]
+  zrevrange-by-score-with-score-doubles [client key min max & optional]
+  (if (empty? optional)
+    (->tupled-set client (.zrevrangeByScoreWithScores client key #^Double min #^Double max))
+    (let [offset (first optional)
+          count (second optional)]
+      (->tupled-set client (.zrevrangeByScoreWithScores client key #^Double min #^Double max offset count)))))
+(defmethod zrevrange-by-score-with-scores [:Object :String :String :String]
+  zrevrange-by-score-with-score-strings [client key min max & optional]
+  (if (empty? optional)
+    (->tupled-set client (.zrevrangeByScoreWithScores client key #^String min #^String max))
+    (let [offset (first optional)
+          count (second optional)]
+      (->tupled-set client (.zrevrangeByScoreWithScores client key #^String min #^String max offset count)))))
+
+(defn zremrange-by-rank [client key start end] (->int client (.zremrangeByRank key start end)))
+(defn zremrange-by-score [client key start end] (->int client (.zremrangeByScore key start end)))
+
+(defmulti zremrange-by-score (fn [client key start end] [client key start end]))
+(defmethod zremrange-by-score [:Object :String :Double :Double]
+  zremrange-by-score-doubles [client key start end]
+  (->int client (.zremrangeByScore client key #^Double start #^Double end)))
+(defmethod zremrange-by-score [:Object :String :String :String]
+  zremrange-by-score-strings [client key start end]
+  (->int client (.zremrangeByScore client key #^String start #^String end)))
+
+(defmulti zunionstore (fn [client dest-key & args] (first args)))
+(defmethod zunionstore :String
+  zunionstore-normal [client dest-key & keys] (->int client (.zunionstore client dest-key keys)))
+(defmethod zunionstore :redis.clients.jedis.ZParams
+  zunionstore-with-params [client dest-key params & keys] (->int client (.zunionstore client dest-key params keys)))
+
+(defmulti zinterstore (fn [client dest-key & args] (first args)))
+(defmethod zinterstore :String
+  zinterstore-normal [client dest-key & keys] (->int client (.zinterstore client dest-key keys)))
+(defmethod zinterstore :redis.clients.jedis.ZParams
+  zinterstore-with-params [client dest-key params & keys] (->int client (.zinterstore client dest-key params keys)))
+
+(defn strlen [client key] (->string client (.strlen client key)))
+(defn lpushx [client key & strings] (->int client (.lpushx client key strings)))
+(defn persist [client key] (->int client (.persist client key)))
+(defn rpushx [client key & strings] (->int (.rpushx client key strings)))
+(defn echo [client string] (->string (.echo client string)))
+(defn linsert [client key where pivot value] (->int (.linsert client key where pivot value)))
+(defn brpoplpush [client source dest timeout] (->blocking:string client (.brpoplpush client source dest timeout)))
+
+(defmulti setbit (fn [client offset value] value))
+(defmethod setbit :Boolean setbit-bool [client offset value] (->boolean client (.setbit client key offset #^Boolean value)))
+(defmethod setbit :String setbit-bool [client offset value] (->boolean client (.setbit client key offset #^String value)))
+
+(defn getbit [client key offset] (->boolean client (.getbit client key offset)))
+
+(defn setrange [client key offset value] (->int client (.setrange client key offset value)))
+(defn getrange [client key start-offset end-offset] (->string client (.getrange client key start-offset end-offset)))
+
+(defn config-get [client pattern] (->list client (.configGet client pattern)))
+(defn config-set [client param val] (->status client (.configSet client param val)))
+
+(defn ^{:private true} get-eval-result [client]
+  (let [result (.getOne client)
+        ret (wrap (cond (isa? result byte[]) (SafeEncoder/encode result)
+                        (seq? result) (map (fn [x] (if (nil? x) x (SafeEncoder/encode x)))
+                                           result)
+                        :else result))]
+    (.rollbackTimeout client)
+    ret))
+
+(defn eval [client script key-count & params]
+     (with-chan #(non-multi client
+                            (.setTimeoutInfinite client)
+                            (.eval client script key-count params)
+                            (get-eval-result client))))
 
 (defn set [client key value] (->status client (.set client key value)))
 
