@@ -3,7 +3,7 @@
   (:import (java.net.URI)
            (java.util HashSet LinkedHashSet)
            (redis.clients.jedis Client JedisPubSub BuilderFactory Tuple SortingParams)
-           (redis.clients.util SafeEncoder)
+           (redis.clients.util SafeEncoder Slowlog)
            (redis.clients.jedis.exceptions JedisDataException))
   (:require [clojure.core.async :as async :refer [go >! <! chan]]))
 
@@ -384,6 +384,24 @@
     (go (let [replies (<! c)]
           (>! c2 (first replies))))
     c2))
+
+(defn script-load [client script] (->string client (.scriptLoad client script)))
+
+(defmulti slowlog-get (fn [client & args] (empty? args)))
+(defmethod slowlog-get :false [client]
+  (with-chan (fn []
+               (.slowlogGet client)
+               (Slowlog/from (.getObjectMultiBulkReply client)))))
+(defmethod slowlog-get :true [client & entries]
+  (with-chan (fn []
+               (.slowlogGet client entries)
+               (Slowlog/from (.getObjectMultiBulkReply client)))))
+
+(defn object-refcount [client string] (->int client (.objectRefcount client string)))
+(defn object-encoding [client string] (->string client (.objectEncoding client string)))
+(defn object-idletime [client string] (->string client (.objectIdletime client string)))
+(defn bitcount [client key start end] (->int client (.bitcount client key start end)))
+(defn bitop [client op dest-key & src-keys] (->int client (.bitop op dest-key src-keys)))
 
 
 (defn subscribe [client jedis-pub-sub & channels]
