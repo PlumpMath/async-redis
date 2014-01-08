@@ -442,6 +442,12 @@
 (defmethod set [:4 :Long] [client key val expr time] (->status client (.set client key val expr #^Long time)))
 (defmethod set [:4 :Integer] [client key val expr time] (->status client (.set client key val expr #^Integer time)))
 
+(defn client-kill [client client-name] (->status client (.clientKill client client-name)))
+(defn client-setname [client name] (->status client (.clientSetname client name)))
+(defn migrate [client host port key dest-db timeout] (->status client (.migrate host port key dest-db timeout)))
+(defn hincr-by-float [client key field inc] (->double client (.hincrByFloat client key field inc)))
+
+
 (defn subscribe [client jedis-pub-sub & channels]
   (with-chan (fn []
                (.setTimeoutInfinite client)
