@@ -2,7 +2,7 @@
   (:refer-clojure :exclude [get type keys set sort eval])
   (:import (java.net.URI)
            (java.util HashSet LinkedHashSet)
-           (redis.clients.jedis Client JedisPubSub BuilderFactory Tuple SortingParams)
+           (redis.clients.jedis Client JedisPubSub BuilderFactory Tuple SortingParams Protocol)
            (redis.clients.util SafeEncoder Slowlog)
            (redis.clients.jedis.exceptions JedisDataException))
   (:require [clojure.core.async :as async :refer [go >! <! chan]]))
@@ -71,6 +71,11 @@
   `(with-chan #(non-multi ~client
                           ~@body
                           (= 1 (.getIntegerReply ~client)))))
+
+(defmacro ->bytes [client & body]
+  `(with-chan #(non-multi ~client
+                          ~@body
+                          (.getBinaryBulkReply ~client))))
 
 (defmacro ->status [client & body]
   `(with-chan #(non-multi ~client
@@ -403,6 +408,39 @@
 (defn bitcount [client key start end] (->int client (.bitcount client key start end)))
 (defn bitop [client op dest-key & src-keys] (->int client (.bitop op dest-key src-keys)))
 
+(defn sentinel-masters [client]
+  (with-chan (fn []
+               (.sentinel client Protocol/SENTINEL_MASTERS)
+               (map (fn [o] (.build BuilderFactory/STRING_MAP o)) (.getObjectMultiBulkReply client)))))
+
+(defn sentinel-get-master-addr-by-name [client master-name]
+  (with-chan (fn []
+               (.sentinel client Protocol/SENTINEL_GET_MASTER_ADDR_BY_NAME master-name)
+               (.build BuilderFactory/STRING_LIST (.getObjectMultiBulkReply client)))))
+
+(defn sentinel-reset [client pattern] (->int client (.sentinel client Protocol/SENTINEL_RESET pattern)))
+(defn sentinel-slaves [client master-name]
+  (with-chan (fn []
+               (.sentinel client Protocol/SENTINEL_SLAVES master-name)
+               (map (fn [o] (.build BuilderFactory/STRING_MAP o)) (.getObjectMultiBulkReply client)))))
+
+(defn dump [client key] (->bytes client (.dump client key)))
+(defn restore [client key ttl serialized-value] (->status client (.restore client key ttl serialized-value)))
+(defn pexpire [client key millis] (->int client (.pexpire client key millis)))
+(defn pexpire-at [client key milli-ts] (->int client (.pexpireAt client key milli-ts)))
+(defn pttl [client key] (->int client (.pttl client key)))
+(defn incr-by-float [client key inc] (->double client (.incrByFloat client key inc)))
+(defn psetex [client key millis val] (->status client (.psetex client key millis val)))
+
+;; key , value (->status (.set key val))
+;; key, val, nxx
+;; key, value, nxx, expr, (long) time
+;; key, value, nxx, expr, (int) time
+(defmulti set (fn [client & args] [(count args) (nth args 4 false)]))
+(defmethod set [:2 :false] [client key val] (->status client (.set client key val)))
+(defmethod set [:3 :false] [client key val nxxx] (->status client (.set client key val nxxx)))
+(defmethod set [:4 :Long] [client key val expr time] (->status client (.set client key val expr #^Long time)))
+(defmethod set [:4 :Integer] [client key val expr time] (->status client (.set client key val expr #^Integer time)))
 
 (defn subscribe [client jedis-pub-sub & channels]
   (with-chan (fn []
@@ -417,7 +455,5 @@
                          (.setTimeoutInfinite client)
                          (.proceedWithPatterns jedis-pub-sub client patterns)
                          (.rollbackTimeout client))))
-
-(defn set [client key value] (->status client (.set client key value)))
 
 
