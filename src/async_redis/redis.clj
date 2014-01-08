@@ -371,6 +371,21 @@
 (defmethod evalsha :Integer [& params] (apply *evalsha params))
 (defmethod evalsha :List<String> [client sha1 keys params] (*evalsha client sha1 (count keys) (eval-params params)))
 
+(defn scripts-exist? [client & sha1s]
+  (let [c (chan)]
+    (go
+     (.scriptExists client (into-array String sha1s))
+     (>! c (map (fn [i] (= i 1)) (.getIntegerMultiBulkReply client))))
+    c))
+
+(defn script-exists? [client sha1]
+  (let [c (scripts-exist? client sha1)
+        c2 (chan)]
+    (go (let [replies (<! c)]
+          (>! c2 (first replies))))
+    c2))
+
+
 (defn subscribe [client jedis-pub-sub & channels]
   (with-chan (fn []
                (.setTimeoutInfinite client)
