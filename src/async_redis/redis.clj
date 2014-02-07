@@ -214,7 +214,7 @@
 (defn watch [client & keys] (->status-multi client (.watch client keys)))
 
 (defmulti sort (fn [& args] [(nth args 2 false) (> (count args) 3)]))
-(defmethod sort [:false :false] sort-simple [client key] (->list client (.sort client key)))
+(defmethod sort [false false] sort-simple [client key] (->list client (.sort client key)))
 (defmethod sort [:SortingParams :false] sort-with-params [client key sort-params] (->list client (.sort client key #^SortParams sort-params)))
 (defmethod sort [:String :false] sort-to-dest [client key dest-key] (->int client (.sort client key #^String dest-key)))
 (defmethod sort [:SortingParams :true] sort-with-params-to-dest [client key sort-params dest-key] (->int client (.sort client key sort-params dest-key)))
@@ -368,12 +368,12 @@
 (defn eval-params [keys values] (into-array String (interleave keys values)))
 
 (defmulti eval (fn [client script & optional] (if (nil? optional) false (first optional))))
-(defmethod eval :false [client script] (*eval client script 0))
+(defmethod eval false [client script] (*eval client script 0))
 (defmethod eval :Integer [& params] (apply *eval params))
 (defmethod eval :List<String> [client script keys params] (*eval client script (count keys) (eval-params params)))
 
 (defmulti evalsha (fn [client sha1 & optional] (if (nil? optional) false (first optional))))
-(defmethod evalsha :false [client sha1] (*evalsha client sha1 0))
+(defmethod evalsha false [client sha1] (*evalsha client sha1 0))
 (defmethod evalsha :Integer [& params] (apply *evalsha params))
 (defmethod evalsha :List<String> [client sha1 keys params] (*evalsha client sha1 (count keys) (eval-params params)))
 
@@ -439,9 +439,9 @@
 ;; key, value, nxx, expr, (int) time
 (defmulti set (fn [client & args] [(count args) (nth args 4 false)]))
 (defmethod set [2 false] [client key val] (->status client (.set client key val)))
-(defmethod set [:3 :false] [client key val nxxx] (->status client (.set client key val nxxx)))
-(defmethod set [:4 :Long] [client key val expr time] (->status client (.set client key val expr #^Long time)))
-(defmethod set [:4 :Integer] [client key val expr time] (->status client (.set client key val expr #^Integer time)))
+(defmethod set [3 false] [client key val nxxx] (->status client (.set client key val nxxx)))
+(defmethod set [4 :Long] [client key val expr time] (->status client (.set client key val expr #^Long time)))
+(defmethod set [4 :Integer] [client key val expr time] (->status client (.set client key val expr #^Integer time)))
 
 (defn client-kill [client client-name] (->status client (.clientKill client client-name)))
 (defn client-setname [client name] (->status client (.clientSetname client name)))
