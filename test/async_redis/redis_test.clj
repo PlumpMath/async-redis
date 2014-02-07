@@ -1,5 +1,6 @@
 (ns async-redis.redis-test
   (:refer-clojure :exclude [get type keys set sort eval])
+  (:import (clojure.core.async.impl.channels ManyToManyChannel))
   (:require [clojure.test :refer :all]
             [async-redis.redis :refer :all]))
 
@@ -17,4 +18,4 @@
 
 (deftest test-with-chan
   (testing "with-chan returns a channel"
-           (is (instance? clojure.core.async.impl.channels.ManyToManyChannel (with-chan (fn [] 7))))))
+           (is (instance? ManyToManyChannel (with-chan (fn [] 7))))))
