@@ -11,10 +11,10 @@
 (def ^{:private true} local-host "127.0.0.1")
 (def ^{:private true} default-port 6379)
 
-(defn- wrap [val]
+(defn wrap [val]
   (if (nil? val) false val))
 
-(defn- with-chan [f]
+(defn with-chan [f]
   (let [c (chan)]
     (go (>! c (f)))
     c))
