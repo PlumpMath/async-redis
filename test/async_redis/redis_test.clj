@@ -25,5 +25,5 @@
 
 (deftest simple-roundtrip
   (let [local-client (connect nil nil)]
-    (set local-client "greeting" "howdy")
+    (<!! (set local-client "greeting" "howdy")) ;; doing the blocking read so that connection is clear for next op.
     (is (= "howdy" (<!! (get local-client "greeting"))))))
