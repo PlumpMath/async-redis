@@ -438,7 +438,7 @@
 ;; key, value, nxx, expr, (long) time
 ;; key, value, nxx, expr, (int) time
 (defmulti set (fn [client & args] [(count args) (nth args 4 false)]))
-(defmethod set [:2 :false] [client key val] (->status client (.set client key val)))
+(defmethod set [2 false] [client key val] (->status client (.set client key val)))
 (defmethod set [:3 :false] [client key val nxxx] (->status client (.set client key val nxxx)))
 (defmethod set [:4 :Long] [client key val expr time] (->status client (.set client key val expr #^Long time)))
 (defmethod set [:4 :Integer] [client key val expr time] (->status client (.set client key val expr #^Integer time)))
