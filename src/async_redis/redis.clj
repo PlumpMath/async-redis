@@ -2,7 +2,8 @@
   (:refer-clojure :exclude [get type keys set sort eval])
   (:import (java.net.URI)
            (java.util HashSet LinkedHashSet)
-           (redis.clients.jedis Client JedisPubSub BuilderFactory Tuple SortingParams Protocol)
+           (redis.clients.jedis Client JedisPubSub BuilderFactory
+                                Tuple SortingParams Protocol)
            (redis.clients.util SafeEncoder Slowlog)
            (redis.clients.jedis.exceptions JedisDataException))
   (:require [clojure.core.async :as async :refer [go >! <! chan]]))
@@ -446,7 +447,6 @@
 (defn client-setname [client name] (->status client (.clientSetname client name)))
 (defn migrate [client host port key dest-db timeout] (->status client (.migrate host port key dest-db timeout)))
 (defn hincr-by-float [client key field inc] (->double client (.hincrByFloat client key field inc)))
-
 
 (defn subscribe [client jedis-pub-sub & channels]
   (with-chan (fn []
