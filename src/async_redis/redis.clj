@@ -19,6 +19,11 @@
     (go (>! c (f)))
     c))
 
+(defn get-status-code-reply [client]
+  (let [bytes (.getBinaryBulkReply client)]
+    (cond (nil? bytes) nil
+          :else (SafeEncoder/encode bytes))))
+
 (defn check-multi [client]
   (if (.isInMulti client)
     (throw (JedisDataException. "Can only use transactions when in multi mode"))))
@@ -81,12 +86,12 @@
 (defmacro ->status [client & body]
   `(with-chan #(non-multi ~client
                           ~@body
-                          (wrap (.getStatusCodeReply ~client)))))
+                          (wrap (get-status-code-reply ~client)))))
 
 (defmacro ->status-multi [client & body]
   `(with-chan (fn []
                 ~@body
-                (.getStatusCodeReply ~client))))
+                (get-status-code-reply ~client))))
 
 (defmacro ->set [client & body]
   `(with-chan #(non-multi ~client
@@ -123,7 +128,9 @@
 
 
 (defn connect [host port]
-  (Client. (or host local-host) (or port default-port)))
+  (let [client (Client. (or host local-host) (or port default-port))]
+    (.connect client)
+    client))
 
 
 (defn get [client key] (->string client (.get client key)))
@@ -345,9 +352,9 @@
 (defn ^{:private true} get-eval-result [client]
   (let [result (.getOne client)]
         (wrap (cond (isa? result byte[]) (SafeEncoder/encode result)
-                        (seq? result) (map (fn [x] (if (nil? x) x (SafeEncoder/encode x)))
-                                           result)
-                        :else result))))
+                    (seq? result) (map (fn [x] (if (nil? x) x (SafeEncoder/encode x)))
+                                       result)
+                    :else result))))
 
 (defn ^{:private true} *eval [client script key-count & params]
      (with-chan (fn []
