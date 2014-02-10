@@ -27,12 +27,19 @@
   (let [local-client (connect nil nil)
         key "watevah"
         val (apply str (flatten (take 20 (repeatedly #(rand-nth "abcdefghijklmnopqrstuvwxyz")))))]
-    (is (= false (<!! (exists local-client val)))) ;; random-enough key, as control
+
+    (is (= false (<!! (exists local-client val)))) ;; control test for (exists)
     (if (<!! (exists local-client key))
       (<!! (del local-client key)))
     (is (= false (<!! (exists local-client key))))
     (<!! (set local-client key val)) ;; doing the blocking read so that connection is clear for next op.
-    (is (= true (<!! (exists local-client key))))
+    (is (= true (<!! (exists local-client key)))) ;; double-check (exists)
     (is (= val (<!! (get local-client key))))
+
+    (is (= "string" (<!! (type local-client key)))) ;; tests (type)
+
     (<!! (del local-client key))
+    (is (= false (<!! (exists local-client val)))) ;; tests (del)
+
+
     ))
