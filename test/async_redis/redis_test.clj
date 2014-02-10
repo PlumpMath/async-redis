@@ -24,6 +24,15 @@
            (is (= 8 (<!! (with-chan (fn [] 8)))))))
 
 (deftest simple-roundtrip
-  (let [local-client (connect nil nil)]
-    (<!! (set local-client "greeting" "howdy")) ;; doing the blocking read so that connection is clear for next op.
-    (is (= "howdy" (<!! (get local-client "greeting"))))))
+  (let [local-client (connect nil nil)
+        key "watevah"
+        val (apply str (flatten (take 20 (repeatedly #(rand-nth "abcdefghijklmnopqrstuvwxyz")))))]
+    (is (= false (<!! (exists local-client val)))) ;; random-enough key, as control
+    (if (<!! (exists local-client key))
+      (<!! (del local-client key)))
+    (is (= false (<!! (exists local-client key))))
+    (<!! (set local-client key val)) ;; doing the blocking read so that connection is clear for next op.
+    (is (= true (<!! (exists local-client key))))
+    (is (= val (<!! (get local-client key))))
+    (<!! (del local-client key))
+    ))

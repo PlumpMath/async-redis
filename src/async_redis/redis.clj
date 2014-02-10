@@ -135,7 +135,7 @@
 
 (defn get [client key] (->string client (.get client key)))
 (defn exists [client key] (->boolean client (.exists client key)))
-(defn del [client & keys] (->int client (.del client keys)))
+(defn del [client & keys] (->int client (.del client (into-array String keys))))
 (defn type [client key] (->status client (.type client key)))
 (defn keys [client pattern] (->status client (.type client key)))
 (defn random-key [client] (->string client (.randomKey client)))
