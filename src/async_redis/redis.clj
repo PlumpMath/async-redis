@@ -132,6 +132,8 @@
     (.connect client)
     client))
 
+(defn select [client db] (.select client db))
+(defn db [client] (.getDB client))
 
 (defn get [client key] (->string client (.get client key)))
 (defn exists [client key] (->boolean client (.exists client key)))

@@ -23,23 +23,29 @@
   (testing "simple with-chan"
            (is (= 8 (<!! (with-chan (fn [] 8)))))))
 
-(deftest simple-roundtrip
+(deftest the-basics
   (let [local-client (connect nil nil)
         key "watevah"
         val (apply str (flatten (take 20 (repeatedly #(rand-nth "abcdefghijklmnopqrstuvwxyz")))))]
 
-    (is (= false (<!! (exists local-client val)))) ;; control test for (exists)
-    (if (<!! (exists local-client key))
-      (<!! (del local-client key)))
-    (is (= false (<!! (exists local-client key))))
+    (testing "control for exists"
+             (is (= false (<!! (exists local-client val)))))
+
+    (testing "control that our key isn't used yet"
+             (if (<!! (exists local-client key))
+               (<!! (del local-client key)))
+
+             (is (= false (<!! (exists local-client key)))))
+
     (<!! (set local-client key val)) ;; doing the blocking read so that connection is clear for next op.
-    (is (= true (<!! (exists local-client key)))) ;; double-check (exists)
-    (is (= val (<!! (get local-client key))))
+    (testing "double-check exists"
+             (is (= true (<!! (exists local-client key)))))
+    (testing "set round-trip"
+             (is (= val (<!! (get local-client key)))))
+    (testing "type is as expected"
+             (is (= "string" (<!! (type local-client key)))))
 
-    (is (= "string" (<!! (type local-client key)))) ;; tests (type)
-
-    (<!! (del local-client key))
-    (is (= false (<!! (exists local-client val)))) ;; tests (del)
-
-
+    (testing "deletion"
+             (<!! (del local-client key))
+             (is (= false (<!! (exists local-client val)))))
     ))
