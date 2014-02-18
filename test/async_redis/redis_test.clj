@@ -5,10 +5,6 @@
             [clojure.core.async :as async :refer [<!!]]
             [async-redis.redis :refer :all]))
 
-(deftest can-connect
-  (testing "can connect to redis"
-           (is (not (= nil (connect nil nil))))))
-
 (deftest test-wrap
   (testing "wrapping nil doesn't return nil"
            (is (= false (wrap nil))))
@@ -24,28 +20,25 @@
            (is (= 8 (<!! (with-chan (fn [] 8)))))))
 
 (deftest the-basics
-  (let [local-client (connect nil nil)
+  (let [client (connect nil nil)
         key "watevah"
-        val (apply str (flatten (take 20 (repeatedly #(rand-nth "abcdefghijklmnopqrstuvwxyz")))))]
+        val (apply str (take 20 (repeatedly #(rand-nth "abcdefghijklmnopqrstuvwxyz"))))]
 
-    (testing "control for exists"
-             (is (= false (<!! (exists local-client val)))))
+    ;(select client 9)
+
+    (testing "control for exists" (is (= false (<!! (exists client val)))))
 
     (testing "control that our key isn't used yet"
-             (if (<!! (exists local-client key))
-               (<!! (del local-client key)))
+             (if (<!! (exists client key)) (<!! (del client key)))
 
-             (is (= false (<!! (exists local-client key)))))
+             (is (= false (<!! (exists client key)))))
 
-    (<!! (set local-client key val)) ;; doing the blocking read so that connection is clear for next op.
-    (testing "double-check exists"
-             (is (= true (<!! (exists local-client key)))))
-    (testing "set round-trip"
-             (is (= val (<!! (get local-client key)))))
-    (testing "type is as expected"
-             (is (= "string" (<!! (type local-client key)))))
+    (<!! (set client key val)) ;; doing the blocking read so that connection is clear for next op.
+    (testing "double-check exists" (is (= true (<!! (exists client key)))))
+    (testing "set round-trip" (is (= val (<!! (get client key)))))
+    (testing "type is as expected" (is (= "string" (<!! (type client key)))))
 
     (testing "deletion"
-             (<!! (del local-client key))
-             (is (= false (<!! (exists local-client val)))))
+             (<!! (del client key))
+             (is (= false (<!! (exists client val)))))
     ))

@@ -132,6 +132,8 @@
     (.connect client)
     client))
 
+(defn disconnect [client] (.disconnect client))
+
 (defn select [client db] (.select client db))
 (defn db [client] (.getDB client))
 
