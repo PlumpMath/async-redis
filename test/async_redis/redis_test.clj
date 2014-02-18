@@ -19,10 +19,13 @@
   (testing "simple with-chan"
            (is (= 8 (<!! (with-chan (fn [] 8)))))))
 
+(defn random-string [length]
+  (apply str (take length (repeatedly #(rand-nth "abcdefghijklmnopqrstuvwxyz")))))
+
 (deftest the-basics
   (let [client (connect nil nil)
         key "watevah"
-        val (apply str (take 20 (repeatedly #(rand-nth "abcdefghijklmnopqrstuvwxyz"))))]
+        val (random-string 20)]
 
     ;(select client 9)
 
@@ -42,3 +45,10 @@
              (<!! (del client key))
              (is (= false (<!! (exists client val)))))
     ))
+
+(deftest test-on-client
+  (with (connect nil nil)
+        (let [key (random-string 20)
+              val (random-string 20)]
+          (<!! (set key val))
+          (testing "round-trip" (is (= val (<!! (get key))))))))

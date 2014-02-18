@@ -132,12 +132,18 @@
     (.connect client)
     client))
 
-(defn disconnect [client] (.disconnect client))
+(defn disconnect* [client] (.disconnect client))
+(def ^:dynamic disconnect disconnect*)
 
-(defn select [client db] (.select client db))
-(defn db [client] (.getDB client))
+(defn select* [client db] (.select client db))
+(def ^:dynamic select select*)
 
-(defn get [client key] (->string client (.get client key)))
+(defn db* [client] (.getDB client))
+(def ^:dynamic db db*)
+
+(defn get* [client key] (->string client (.get client key)))
+(def ^:dynamic get get*)
+
 (defn exists [client key] (->boolean client (.exists client key)))
 (defn del [client & keys] (->int client (.del client (into-array String keys))))
 (defn type [client key] (->status client (.type client key)))
@@ -448,11 +454,12 @@
 ;; key, val, nxx
 ;; key, value, nxx, expr, (long) time
 ;; key, value, nxx, expr, (int) time
-(defmulti set (fn [client & args] [(count args) (nth args 4 false)]))
-(defmethod set [2 false] [client key val] (->status client (.set client key val)))
-(defmethod set [3 false] [client key val nxxx] (->status client (.set client key val nxxx)))
-(defmethod set [4 :Long] [client key val expr time] (->status client (.set client key val expr #^Long time)))
-(defmethod set [4 :Integer] [client key val expr time] (->status client (.set client key val expr #^Integer time)))
+(defmulti set* (fn [client & args] [(count args) (nth args 4 false)]))
+(defmethod set* [2 false] [client key val] (->status client (.set client key val)))
+(defmethod set* [3 false] [client key val nxxx] (->status client (.set client key val nxxx)))
+(defmethod set* [4 :Long] [client key val expr time] (->status client (.set client key val expr #^Long time)))
+(defmethod set* [4 :Integer] [client key val expr time] (->status client (.set client key val expr #^Integer time)))
+(def ^:dynamic set set*)
 
 (defn client-kill [client client-name] (->status client (.clientKill client client-name)))
 (defn client-setname [client name] (->status client (.clientSetname client name)))
@@ -474,3 +481,9 @@
                          (.rollbackTimeout client))))
 
 
+(defmacro with [client & body]
+  `(let [client# ~client]
+     (binding [disconnect #(disconnect* client#)
+               get #(get* client# %)
+               set #(set* client# %1 %2)]
+       ~@body)))
