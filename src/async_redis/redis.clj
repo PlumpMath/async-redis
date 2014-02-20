@@ -144,22 +144,54 @@
 (defn get* [client key] (->string client (.get client key)))
 (def ^:dynamic get get*)
 
-(defn exists [client key] (->boolean client (.exists client key)))
-(defn del [client & keys] (->int client (.del client (into-array String keys))))
-(defn type [client key] (->status client (.type client key)))
-(defn keys [client pattern] (->status client (.type client key)))
-(defn random-key [client] (->string client (.randomKey client)))
-(defn rename [client old-key new-key] (->status client (.rename client old-key new-key)))
-(defn renamenx [client old-key new-key] (->status client (.renamenx client old-key new-key)))
-(defn expire [client key seconds] (->int client (.expire client key seconds)))
-(defn expire-at [client key timestamp] (->int client (.expireAt client key timestamp)))
-(defn ttl [client key] (->int client (.ttl client key)))
-(defn move [client key db-index] (->int client (.move client key db-index)))
-(defn getset [client key value] (->string client (.getSet client key value)))
-(defn mget [client & keys] (->list client (.mget client keys)))
-(defn setnx [client key value] (->int client (.setnx client key value)))
-(defn setex [client key seconds value] (->status client (.setex client key seconds value)))
-(defn mset [client & keysvalues] (->status client (.mset client keysvalues)))
+(defn exists* [client key] (->boolean client (.exists client key)))
+(def ^:dynamic exists exists*)
+
+(defn del* [client & keys] (->int client (.del client (into-array String keys))))
+(def ^:dynamic del del*)
+
+(defn type* [client key] (->status client (.type client key)))
+(def ^:dynamic type type*)
+
+(defn keys* [client pattern] (->status client (.type client key)))
+(def ^:dynamic keys keys*)
+
+(defn random-key* [client] (->string client (.randomKey client)))
+(def ^:dynamic random-key random-key*)
+
+(defn rename* [client old-key new-key] (->status client (.rename client old-key new-key)))
+(def ^:dynamic rename rename*)
+
+(defn renamenx* [client old-key new-key] (->status client (.renamenx client old-key new-key)))
+(def ^:dynamic renamenx renamenx*)
+
+(defn expire* [client key seconds] (->int client (.expire client key seconds)))
+(def ^:dynamic expire expire*)
+
+(defn expire-at* [client key timestamp] (->int client (.expireAt client key timestamp)))
+(def ^:dynamic expire-at expire-at*)
+
+(defn ttl* [client key] (->int client (.ttl client key)))
+(def ^:dynamic ttl ttl*)
+
+(defn move* [client key db-index] (->int client (.move client key db-index)))
+(def ^:dynamic move move*)
+
+(defn getset* [client key value] (->string client (.getSet client key value)))
+(def ^:dynamic getset getset*)
+
+(defn mget* [client & keys] (->list client (.mget client keys)))
+(def ^:dynamic mget mget*)
+
+(defn setnx* [client key value] (->int client (.setnx client key value)))
+(def ^:dynamic setnx setnx*)
+
+(defn setex* [client key seconds value] (->status client (.setex client key seconds value)))
+(def ^:dynamic setex setex*)
+
+(defn mset* [client & keysvalues] (->status client (.mset client keysvalues)))
+(def ^:dynamic mset mset*)
+
 (defn msetnx [client & keysvalues] (->int client (.msetnx client keysvalues)))
 (defn decr-by [client key inc] (->int client (.decrBy client key inc)))
 (defn decr [client key] (->int client (.decr client key)))
@@ -485,5 +517,20 @@
   `(let [client# ~client]
      (binding [disconnect #(disconnect* client#)
                get #(get* client# %)
-               set #(set* client# %1 %2)]
+               set #(set* client# %1 %2)
+               exists #(exists* client# %)
+               del (fn [& args#] (apply del* (cons client# args#)))
+               type #(type* client# %)
+               keys #(keys* client# %)
+               random-key #(random-key* client#)
+               rename #(rename* client# %1 %2)
+               renamenx #(renamenx* client# %1 %2)
+               expire-at #(expire-at* client# %1 %2)
+               ttl #(ttl* client# %)
+               move #(move* client# %1 %2)
+               getset #(getset* client# %1 %2)
+               mget (fn [& args#] (apply mget* (cons client# args#)))
+               setnx #(setnx* client# %1 %2)
+               setex #(setex* client# %1 %2 %3)
+               mset (fn [& args#] (apply mset* (cons client# args#)))]
        ~@body)))
