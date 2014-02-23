@@ -135,7 +135,7 @@
 (defn disconnect* [client] (.disconnect client))
 (def ^:dynamic disconnect disconnect*)
 
-(defn select* [client db] (.select client db))
+(defn select* [client db] (->status client (.select client db)))
 (def ^:dynamic select select*)
 
 (defn db* [client] (.getDB client))
@@ -704,6 +704,8 @@
 (defmacro with [client & body]
   `(let [client# ~client]
      (binding [disconnect #(disconnect* client#)
+               select #(select* client# %)
+               db #(db* client#)
                get #(get* client# %)
                set #(set* client# %1 %2)
                exists #(exists* client# %)

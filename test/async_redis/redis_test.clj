@@ -23,28 +23,28 @@
   (apply str (take length (repeatedly #(rand-nth "abcdefghijklmnopqrstuvwxyz")))))
 
 (deftest the-basics
-  (let [client (connect nil nil)
-        key "watevah"
-        val (random-string 20)]
+  (with (connect nil nil)
+        (let [key "watevah"
+              val (random-string 20)]
 
-    ;(select client 9)
+          (<!! (select 9))
 
-    (testing "control for exists" (is (= false (<!! (exists client val)))))
+          (testing "control for exists" (is (= false (<!! (exists val)))))
 
-    (testing "control that our key isn't used yet"
-             (if (<!! (exists client key)) (<!! (del client key)))
+          (testing "control that our key isn't used yet"
+                   (if (<!! (exists key)) (<!! (del key)))
 
-             (is (= false (<!! (exists client key)))))
+                   (is (= false (<!! (exists key)))))
 
-    (<!! (set client key val)) ;; doing the blocking read so that connection is clear for next op.
-    (testing "double-check exists" (is (= true (<!! (exists client key)))))
-    (testing "set round-trip" (is (= val (<!! (get client key)))))
-    (testing "type is as expected" (is (= "string" (<!! (type client key)))))
+          (<!! (set key val)) ;; doing the blocking read so that connection is clear for next op.
+          (testing "double-check exists" (is (= true (<!! (exists key)))))
+          (testing "set round-trip" (is (= val (<!! (get key)))))
+          (testing "type is as expected" (is (= "string" (<!! (type key)))))
 
-    (testing "deletion"
-             (<!! (del client key))
-             (is (= false (<!! (exists client val)))))
-    ))
+          (testing "deletion"
+                   (<!! (del key))
+                   (is (= false (<!! (exists val)))))
+          )))
 
 (deftest test-on-client
   (with (connect nil nil)
