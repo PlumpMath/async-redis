@@ -6,7 +6,7 @@
                                 Tuple SortingParams Protocol)
            (redis.clients.util SafeEncoder Slowlog)
            (redis.clients.jedis.exceptions JedisDataException))
-  (:require [clojure.core.async :as async :refer [go >! <! chan]]))
+  (:require [clojure.core.async :as async :refer [go >! <! <!! chan]]))
 
 (def ^{:private true} local-host "127.0.0.1")
 (def ^{:private true} default-port 6379)
@@ -700,6 +700,7 @@
                          (.rollbackTimeout client))))
 (def ^:dynamic psubscribe psubscribe*)
 
+(defmacro just [statement] `(<!! ~statement))
 
 (defmacro with [client & body]
   `(let [client# ~client]

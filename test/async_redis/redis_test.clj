@@ -27,12 +27,12 @@
         (let [key "watevah"
               val (random-string 20)]
 
-          (<!! (select 9))
+          (just (select 9))
 
           (testing "control for exists" (is (= false (<!! (exists val)))))
 
           (testing "control that our key isn't used yet"
-                   (if (<!! (exists key)) (<!! (del key)))
+                   (if (<!! (exists key)) (just (del key)))
 
                    (is (= false (<!! (exists key)))))
 
@@ -42,7 +42,7 @@
           (testing "type is as expected" (is (= "string" (<!! (type key)))))
 
           (testing "deletion"
-                   (<!! (del key))
+                   (just (del key))
                    (is (= false (<!! (exists val)))))
           )))
 
