@@ -1,5 +1,6 @@
 (ns async-redis.redis-test
-  (:refer-clojure :exclude [get type keys set sort eval])
+  (:refer-clojure :rename {sort core-sort}
+                  :exclude [get type keys set eval])
   (:import (clojure.core.async.impl.channels ManyToManyChannel))
   (:require [clojure.test :refer :all]
             [clojure.core.async :as async :refer [<!!]]
@@ -52,13 +53,22 @@
         (just (flush-db))
         (testing "no keys after flush, control" (is (= '() (<!! (keys "*")))))
 
-        (just (set "a-key" "a-value"))
+        (just (set "a-key" "abc"))
         (testing "now we have one key" (is (= '("a-key") (<!! (keys "*")))))
         (testing "random-key should give me that one" (is (= "a-key" (<!! (random-key)))))
 
         (just (rename "a-key" "another-key"))
         (testing "renamed it" (is (= "another-key" (<!! (random-key)))))
         (testing "and the original is gone" (is (= '("another-key") (<!! (keys "*")))))
+        (testing "value has swapped properly too" (is (= "abc" (<!! (get "another-key")))))
+
+        (just (set "a-key" "def"))
+        (testing "now I have both" (is (= (core-sort '("another-key" "a-key"))
+                                          (core-sort (<!! (keys "*"))))))
+        (testing "paranoia" (is (= "def" (<!! (get "a-key")))))
+
+        (testing "returns 0" (is (= 0 (<!! (renamenx "a-key" "another-key")))))
+        (testing "the rename should have failed" (is (= "abc" (<!! (get "another-key")))))
         ))
 
 (deftest test-on-client

@@ -165,7 +165,7 @@
 (defn rename* [client old-key new-key] (->status client (.rename client old-key new-key)))
 (def ^:dynamic rename rename*)
 
-(defn renamenx* [client old-key new-key] (->status client (.renamenx client old-key new-key)))
+(defn renamenx* [client old-key new-key] (->int client (.renamenx client old-key new-key)))
 (def ^:dynamic renamenx renamenx*)
 
 (defn expire* [client key seconds] (->int client (.expire client key seconds)))
