@@ -2,7 +2,7 @@
   (:refer-clojure :exclude [get type keys set sort eval])
   (:import (java.net.URI)
            (java.util HashSet LinkedHashSet)
-           (redis.clients.jedis Client JedisPubSub BuilderFactory
+           (redis.clients.jedis Client BinaryClient JedisPubSub BuilderFactory
                                 Tuple SortingParams Protocol)
            (redis.clients.util SafeEncoder Slowlog)
            (redis.clients.jedis.exceptions JedisDataException))
@@ -141,6 +141,9 @@
 (defn db* [client] (.getDB client))
 (def ^:dynamic db db*)
 
+(defn flush-db* [client] (->status client (.flushDB client)))
+(def ^:dynamic flush-db flush-db*)
+
 (defn get* [client key] (->string client (.get client key)))
 (def ^:dynamic get get*)
 
@@ -153,7 +156,7 @@
 (defn type* [client key] (->status client (.type client key)))
 (def ^:dynamic type type*)
 
-(defn keys* [client pattern] (->status client (.type client key)))
+(defn keys* [client pattern] (->list client (.keys client pattern)))
 (def ^:dynamic keys keys*)
 
 (defn random-key* [client] (->string client (.randomKey client)))
@@ -836,5 +839,6 @@
                subscribe (fn [& args#] (apply subscribe* (cons client# args#)))
                publish #(publish* client# %1 %2)
                psubscribe (fn [& args#] (apply psubscribe* (cons client# args#)))
+               flush-db #(flush-db* client#)
                ]
        ~@body)))

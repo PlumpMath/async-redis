@@ -36,7 +36,7 @@
 
                    (is (= false (<!! (exists key)))))
 
-          (<!! (set key val)) ;; doing the blocking read so that connection is clear for next op.
+          (just (set key val))
           (testing "double-check exists" (is (= true (<!! (exists key)))))
           (testing "set round-trip" (is (= val (<!! (get key)))))
           (testing "type is as expected" (is (= "string" (<!! (type key)))))
@@ -45,6 +45,13 @@
                    (just (del key))
                    (is (= false (<!! (exists val)))))
           )))
+
+(deftest the-keys
+  (with (connect nil nil)
+        (just (select 9))
+        (just (flush-db))
+        (testing "no keys after flush, control" (is (= '() (<!! (keys "*")))))
+        ))
 
 (deftest test-on-client
   (with (connect nil nil)
