@@ -51,6 +51,14 @@
         (just (select 9))
         (just (flush-db))
         (testing "no keys after flush, control" (is (= '() (<!! (keys "*")))))
+
+        (just (set "a-key" "a-value"))
+        (testing "now we have one key" (is (= '("a-key") (<!! (keys "*")))))
+        (testing "random-key should give me that one" (is (= "a-key" (<!! (random-key)))))
+
+        (just (rename "a-key" "another-key"))
+        (testing "renamed it" (is (= "another-key" (<!! (random-key)))))
+        (testing "and the original is gone" (is (= '("another-key") (<!! (keys "*")))))
         ))
 
 (deftest test-on-client
