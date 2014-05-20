@@ -3,25 +3,39 @@
   (:import (java.net.URI)
            (java.util HashSet LinkedHashSet)
            (redis.clients.jedis Client BinaryClient JedisPubSub BuilderFactory
-                                Tuple SortingParams Protocol)
+                                Tuple SortingParams Protocol JedisPool)
            (redis.clients.util SafeEncoder Slowlog)
            (redis.clients.jedis.exceptions JedisDataException))
   (:require [clojure.core.async :as async :refer [go >! <! <!! chan]]))
 
 (def ^{:private true} local-host "127.0.0.1")
 (def ^{:private true} default-port 6379)
-
+(def ^{:private true} *host local-host)
+(def ^{:private true} *port default-port)
+(def ^{:private true} *pool nil)
 
 ;; client pooling
 
-(defn connect [host port]
-  (let [client (Client. (or host local-host) (or port default-port))]
+(defn configure [host port]
+  (set! *host host)
+  (set! *port port))
+
+(defmulti connect (fn [& args] (count args)))
+(defmethod connect 0
+  connect-to-configured []
+  (connect *host *port))
+(defmethod connect 2
+  connect-directly [host port]
+  (let [client (Client. host port)]
     (.connect client)
     client))
 
-(defn borrow [] nil)
+(defn borrow []
+  (if (nil? *pool)
+    (set! *pool (JedisPool. *host *port)))
+  (.getResource *pool))
 
-(defn return [client])
+(defn return [client] (.returnResourceObject *pool client))
 
 
 ;; channels can't take null values, so we're going to proxy with false

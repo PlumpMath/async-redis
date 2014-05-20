@@ -24,7 +24,7 @@
   (apply str (take length (repeatedly #(rand-nth "abcdefghijklmnopqrstuvwxyz")))))
 
 (deftest the-basics
-  (with (connect nil nil)
+  (with (connect)
         (let [key "watevah"
               val (random-string 20)]
 
@@ -48,7 +48,7 @@
           )))
 
 (deftest the-keys
-  (with (connect nil nil)
+  (with (connect)
         (just (select 9))
         (just (flush-db))
         (testing "no keys after flush, control" (is (= '() (<!! (keys "*")))))
