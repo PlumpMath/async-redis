@@ -16,9 +16,9 @@
 
 (deftest test-with-chan
   (testing "with-chan returns a channel"
-           (is (instance? ManyToManyChannel (with-chan (fn [] 7)))))
+           (is (instance? ManyToManyChannel (with-chan nil (fn [] 7)))))
   (testing "simple with-chan"
-           (is (= 8 (<!! (with-chan (fn [] 8)))))))
+           (is (= 8 (<!! (with-chan nil (fn [] 8)))))))
 
 (defn random-string [length]
   (apply str (take length (repeatedly #(rand-nth "abcdefghijklmnopqrstuvwxyz")))))
@@ -70,10 +70,3 @@
         (testing "returns 0" (is (= 0 (<!! (renamenx "a-key" "another-key")))))
         (testing "the rename should have failed" (is (= "abc" (<!! (get "another-key")))))
         ))
-
-(deftest test-on-client
-  (with (connect nil nil)
-        (let [key (random-string 20)
-              val (random-string 20)]
-          (<!! (set key val))
-          (testing "round-trip" (is (= val (<!! (get key))))))))

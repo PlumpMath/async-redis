@@ -11,13 +11,40 @@
 (def ^{:private true} local-host "127.0.0.1")
 (def ^{:private true} default-port 6379)
 
+
+;; client pooling
+
+(defn connect [host port]
+  (let [client (Client. (or host local-host) (or port default-port))]
+    (.connect client)
+    client))
+
+(defn borrow [] nil)
+
+(defn return [client])
+
+
+;; channels can't take null values, so we're going to proxy with false
+
 (defn wrap [val]
   (if (nil? val) false val))
 
-(defn with-chan [f]
+
+;; the trick for putting results of operations onto channels
+
+(defn with-chan-owned [client f]
   (let [c (chan)]
     (go (>! c (f)))
     c))
+
+(defn with-chan-borrowed [client f]
+  (let [c (chan)]
+    (go (>! c (f))
+        (return client))
+    c))
+
+(def ^:dynamic with-chan with-chan-owned)
+
 
 (defn get-status-code-reply [client]
   (let [bytes (.getBinaryBulkReply client)]
@@ -34,25 +61,31 @@
      ~@body))
 
 (defmacro ->string [client & body]
-  `(with-chan #(non-multi ~client
-                          ~@body
-                          (wrap (.getBulkReply ~client)))))
+  `(let [client# ~client]
+     (with-chan client#
+                #(non-multi client#
+                            ~@body
+                            (wrap (.getBulkReply client#))))))
 
 (defmacro ->double [client & body]
   `(let [client# ~client]
-      (with-chan #(non-multi client#
-                             ~@body
-                             (let [ret# (.getBulkReply client#)]
-                               (if (nil? ret#) ret# (Double/valueOf ret#)))))))
+     (with-chan client#
+                #(non-multi client#
+                            ~@body
+                            (let [ret# (.getBulkReply client#)]
+                              (if (nil? ret#) ret# (Double/valueOf ret#)))))))
 
 (defmacro ->list [client & body]
-  `(with-chan #(non-multi ~client
-                          ~@body
-                          (wrap (.getMultiBulkReply ~client)))))
+  `(let [client# ~client]
+     (with-chan client#
+                #(non-multi client#
+                            ~@body
+                            (wrap (.getMultiBulkReply client#))))))
 
 (defmacro ->blocking:list [client & body]
   `(let [client# ~client]
-     (with-chan #(non-multi client#
+     (with-chan client#
+                #(non-multi client#
                             ~@body
                             (.setTimeoutInfinite client#)
                             (let [response# (wrap (.getMultiBulkReply client#))]
@@ -61,7 +94,8 @@
 
 (defmacro ->blocking:string [client & body]
   `(let [client# ~client]
-     (with-chan #(non-multi client#
+     (with-chan client#
+                #(non-multi client#
                             ~@body
                             (.setTimeoutInfinite client#)
                             (let [response# (wrap (.getBulkReply client#))]
@@ -69,53 +103,72 @@
                               response#)))))
 
 (defmacro ->int [client & body]
-  `(with-chan #(non-multi ~client
-                          ~@body
-                          (wrap (.getIntegerReply ~client)))))
+  `(let [client# ~client]
+     (with-chan client#
+                #(non-multi client#
+                            ~@body
+                            (wrap (.getIntegerReply client#))))))
 
 (defmacro ->boolean [client & body]
-  `(with-chan #(non-multi ~client
-                          ~@body
-                          (= 1 (.getIntegerReply ~client)))))
+  `(let [client# ~client]
+     (with-chan client#
+                #(non-multi client#
+                            ~@body
+                            (= 1 (.getIntegerReply client#))))))
 
 (defmacro ->bytes [client & body]
-  `(with-chan #(non-multi ~client
-                          ~@body
-                          (.getBinaryBulkReply ~client))))
+  `(let [client# ~client]
+     (with-chan client#
+                #(non-multi client#
+                            ~@body
+                            (.getBinaryBulkReply client#)))))
 
 (defmacro ->status [client & body]
-  `(with-chan #(non-multi ~client
-                          ~@body
-                          (wrap (get-status-code-reply ~client)))))
+  `(let [client# ~client]
+     (with-chan client#
+                #(non-multi client#
+                            ~@body
+                            (wrap (get-status-code-reply client#))))))
 
 (defmacro ->status-multi [client & body]
-  `(with-chan (fn []
-                ~@body
-                (get-status-code-reply ~client))))
+  `(let [client# ~client]
+     (with-chan client#
+                (fn []
+                  ~@body
+                  (get-status-code-reply client#)))))
 
 (defmacro ->set [client & body]
-  `(with-chan #(non-multi ~client
-                          ~@body
-                          (.build BuilderFactory/STRING_SET (.getBinaryMultiBulkReply ~client)))))
+  `(let [client# ~client]
+     (with-chan client#
+                #(non-multi client#
+                            ~@body
+                            (.build BuilderFactory/STRING_SET (.getBinaryMultiBulkReply client#))))))
 
 (defmacro ->map [client & body]
-  `(with-chan #(non-multi ~client
-                          ~@body
-                          (.build BuilderFactory/STRING_MAP (.getBinaryMultiBulkReply ~client)))))
+  `(let [client# ~client]
+     (with-chan client#
+                #(non-multi client#
+                            ~@body
+                            (.build BuilderFactory/STRING_MAP (.getBinaryMultiBulkReply client#))))))
 
 (defmacro ->list>set [client & body]
-  `(with-chan #(non-multi ~client
-                          ~@body
-                          (HashSet. (.getMultiBulkReply ~client)))))
+  `(let [client# ~client]
+     (with-chan client#
+                #(non-multi client#
+                            ~@body
+                            (HashSet. (.getMultiBulkReply client#))))))
 
 (defmacro ->list>lset [client & body]
-  `(with-chan #(non-multi ~client
-                          ~@body
-                          (LinkedHashSet. (.getMultiBulkReply ~client)))))
+  `(let [client# ~client]
+     (with-chan client#
+                #(non-multi client#
+                            ~@body
+                            (LinkedHashSet. (.getMultiBulkReply client#))))))
 
 (defmacro ->tupled-set [client & body]
   `(let [client# ~client]
-     (with-chan #(non-multi client#
+     (with-chan client#
+                #(non-multi client#
                             ~@body
                             (let [members-with-scores# (.getMultiBulkReply client#)
                                   iterator# (.iterator members-with-scores#)
@@ -126,11 +179,6 @@
                                      (.add tuple-set# (Tuple. key# value#))))
                               tuple-set#)))))
 
-
-(defn connect [host port]
-  (let [client (Client. (or host local-host) (or port default-port))]
-    (.connect client)
-    client))
 
 (defn disconnect* [client] (.disconnect client))
 (def ^:dynamic disconnect disconnect*)
@@ -542,7 +590,8 @@
                     :else result))))
 
 (defn ^{:private true} *eval [client script key-count & params]
-     (with-chan (fn []
+     (with-chan client
+                (fn []
                   (.setTimeoutInfinite client)
                   (.eval client script key-count params)
                   (let [result (get-eval-result client)]
@@ -550,7 +599,8 @@
                     result))))
 
 (defn ^{:private true} *evalsha [client sha1 key-count & params]
-     (with-chan (fn []
+     (with-chan client
+                (fn []
                   (.setTimeoutInfinite client)
                   (.evalsha client sha1 key-count params)
                   (let [result (get-eval-result client)]
@@ -594,11 +644,13 @@
 
 (defmulti slowlog-get* (fn [client & args] (empty? args)))
 (defmethod slowlog-get* :false [client]
-  (with-chan (fn []
+  (with-chan client
+             (fn []
                (.slowlogGet client)
                (Slowlog/from (.getObjectMultiBulkReply client)))))
 (defmethod slowlog-get* :true [client & entries]
-  (with-chan (fn []
+  (with-chan client
+             (fn []
                (.slowlogGet client entries)
                (Slowlog/from (.getObjectMultiBulkReply client)))))
 (def ^:dynamic slowlog-get slowlog-get*)
@@ -619,13 +671,15 @@
 (def ^:dynamic bitop bitop*)
 
 (defn sentinel-masters* [client]
-  (with-chan (fn []
+  (with-chan client
+             (fn []
                (.sentinel client Protocol/SENTINEL_MASTERS)
                (map (fn [o] (.build BuilderFactory/STRING_MAP o)) (.getObjectMultiBulkReply client)))))
 (def ^:dynamic sentinel-masters sentinel-masters*)
 
 (defn sentinel-get-master-addr-by-name* [client master-name]
-  (with-chan (fn []
+  (with-chan client
+             (fn []
                (.sentinel client Protocol/SENTINEL_GET_MASTER_ADDR_BY_NAME master-name)
                (.build BuilderFactory/STRING_LIST (.getObjectMultiBulkReply client)))))
 (def ^:dynamic sentinel-get-master-addr-by-name sentinel-get-master-addr-by-name*)
@@ -634,7 +688,8 @@
 (def ^:dynamic sentinel-reset sentinel-reset*)
 
 (defn sentinel-slaves* [client master-name]
-  (with-chan (fn []
+  (with-chan client
+             (fn []
                (.sentinel client Protocol/SENTINEL_SLAVES master-name)
                (map (fn [o] (.build BuilderFactory/STRING_MAP o)) (.getObjectMultiBulkReply client)))))
 (def ^:dynamic sentinel-slaves sentinel-slaves*)
@@ -686,7 +741,8 @@
 
 
 (defn subscribe* [client jedis-pub-sub & channels]
-  (with-chan (fn []
+  (with-chan client
+             (fn []
                (.setTimeoutInfinite client)
                (.proceed jedis-pub-sub client channels)
                (.rollbackTimeout client))))
@@ -697,13 +753,21 @@
 
 
 (defn psubscribe* [client jedis-pub-sub & patterns]
-  (with-chan #(non-multi client
+  (with-chan client
+             #(non-multi client
                          (.setTimeoutInfinite client)
                          (.proceedWithPatterns jedis-pub-sub client patterns)
                          (.rollbackTimeout client))))
 (def ^:dynamic psubscribe psubscribe*)
 
 (defmacro just [statement] `(<!! ~statement))
+
+
+(defmacro redis> [& body]
+  `(let [client# (borrow)]
+     (with client#
+           ~@body)))
+
 
 (defmacro with [client & body]
   `(let [client# ~client]
