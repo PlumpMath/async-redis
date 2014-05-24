@@ -115,28 +115,20 @@
     (testing "and getset wrote" (is (= val2 (<!! (r/get key)))))))
 
 (deftest mget
-  (let [key1 (random-string 20)
-        key2 (random-string 20)
-        key3 (random-string 20)
-        val1 (random-string 20)
-        val2 (random-string 20)
-        val3 (random-string 20)]
-    (r/just (r/set! key1 val1))
-    (r/just (r/set! key2 val2))
-    (r/just (r/set! key3 val3))
-
-    (testing "control 1" (is (= val1 (<!! (r/get key1)))))
-    (testing "control 2" (is (= val2 (<!! (r/get key2)))))
-    (testing "control 3" (is (= val3 (<!! (r/get key3)))))
-
-    (testing "mget" (is (= (list val1 val2 val3) (<!! (r/mget key1 key2 key3)))))
+  (let [keys (take 5 (repeatedly #(random-string 20)))
+        vals (take 5 (repeatedly #(random-string 20)))]
+    (doall (map (fn [k v] (r/just (r/set! k v))) keys vals))
+    (testing "mget" (is (= vals (<!! (apply r/mget keys)))))
     )
   )
 
 (deftest concurrent-gets-dont-clobber
   (let [keys (take 100 (repeatedly #(random-string 20))),
         values (take 100 (repeatedly #(random-string 20)))]
-    (map (fn [k v]
-           (r/just (r/set! k v))
-           (testing "I get back my value" (is (= val (<!! (r/get k))))))
-         keys values)))
+    (println "testing clobbering")
+    (doall (map (fn [k v]
+                  (r/just (r/set! k v))
+                  (testing "I get back my value" (is (= v (<!! (r/get k))))))
+                keys values))
+    (testing "don't be lazy" (is (= (first values) (<!! (r/get (first keys))))))
+    ))
