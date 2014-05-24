@@ -251,6 +251,7 @@
 
 (defr select! [db] (->status client (.select client db)))
 
+;; a bit custom, because .getDB is actually just a simple blocking call.
 (defr db []
   (let [result-chan (chan 1)
         db (.getDB client)]

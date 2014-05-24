@@ -70,3 +70,18 @@
   (testing "the rename should have failed" (is (= "abc" (<!! (r/get "another-key")))))
   )
 
+(deftest expiration
+  (r/just (r/flush-db!))
+  (let [key (random-string 20)]
+    (testing "control" (is (= false (<!! (r/get key)))))
+
+    (testing "that there is no TTL for an empty key" (is (< (<!! (r/ttl key)) 0)))
+    (r/just (r/set! key "a value"))
+
+    (testing "just checking" (is (= "a value" (<!! (r/get key)))))
+    (testing "that there is no TTL for an new key" (is (< (<!! (r/ttl key)) 0)))
+
+    (r/just (r/expire! key 1))
+    (testing "that there is a TTL now" (is (not (= -2 (<!! (r/ttl key)))))))
+  )
+
