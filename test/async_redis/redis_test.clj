@@ -141,6 +141,16 @@
     (r/just (apply r/mset! (interleave keys vals)))
     (testing "mset set them all" (is (= vals (<!! (apply r/mget keys)))))))
 
+(deftest msetnx
+  (let [keys (take 100 (repeatedly #(random-string 20)))
+        vals (take 100 (repeatedly #(random-string 20)))
+        vals2 (take 100 (repeatedly #(random-string 20)))]
+    (r/just (apply r/msetnx! (interleave keys vals)))
+    (testing "msetnx set them all the first time" (is (= vals (<!! (apply r/mget keys)))))
+    (r/just (apply r/msetnx! (interleave keys vals2)))
+    (testing "msetnx did not set them all afterward" (is (= vals (<!! (apply r/mget keys)))))
+    ))
+
 (deftest concurrent-gets-dont-clobber
   (let [keys (take 100 (repeatedly #(random-string 20))),
         values (take 100 (repeatedly #(random-string 20)))]

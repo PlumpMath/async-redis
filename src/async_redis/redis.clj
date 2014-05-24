@@ -288,7 +288,8 @@
 (defr setnx! [key value] (->int client (.setnx client key value)))
 
 (defr mset! [& keysvalues] (->status client (.mset client (into-array String keysvalues))))
-(defr msetnx [& keysvalues] (->int client (.msetnx client keysvalues)))
+(defr msetnx! [& keysvalues] (->int client (.msetnx client (into-array String keysvalues))))
+
 (defr decr-by! [key inc] (->int client (.decrBy client key inc)))
 (defr decr! [key] (->int client (.decr client key)))
 (defr incr-by! [key inc] (->int client (.incrBy client key inc)))
