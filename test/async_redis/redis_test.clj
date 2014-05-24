@@ -76,7 +76,8 @@
 
 (deftest expiration
   (r/just (r/flush-db!))
-  (let [key (random-string 20)]
+  (let [key (random-string 20)
+        key2 (random-string 20)]
     (testing "control" (is (= false (<!! (r/get key)))))
 
     (testing "that there is no TTL for an empty key" (is (< (<!! (r/ttl key)) 0)))
@@ -87,6 +88,9 @@
 
     (r/just (r/expire! key 5))
     (testing "that there is a TTL now" (is (> (<!! (r/ttl key)) 0)))
+
+    (r/just (r/setex! key2 20 "1"))
+    (testing "setex! is a shortcut" (is (> (<!! (r/ttl key2)) 0)))
 
     (let [time (+ 30 (int (/ (System/currentTimeMillis) 1000)))]
       (r/just (r/expire-at! key time))

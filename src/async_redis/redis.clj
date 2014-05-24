@@ -277,12 +277,12 @@
 (defr expire! [key seconds] (->int client (.expire client key seconds)))
 (defr expire-at! [key timestamp] (->int client (.expireAt client key timestamp)))
 (defr ttl [key] (->int client (.ttl client key)))
+(defr setex! [key seconds value] (->status client (.setex client key seconds value)))
 
 (defr move! [key db-index] (->int client (.move client key db-index)))
 (defr getset! [key value] (->string client (.getSet client key value)))
 (defr mget [& keys] (->list client (.mget client (into-array String keys))))
 (defr setnx! [key value] (->int client (.setnx client key value)))
-(defr setex! [key seconds value] (->status client (.setex client key seconds value)))
 (defr mset! [& keysvalues] (->status client (.mset client keysvalues)))
 (defr msetnx [& keysvalues] (->int client (.msetnx client keysvalues)))
 (defr decr-by! [key inc] (->int client (.decrBy client key inc)))
