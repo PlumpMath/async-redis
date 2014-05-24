@@ -89,6 +89,5 @@
       (let [seconds-from-now (<!! (r/ttl key))]
         (testing "expiration time goes through" (is (and (> seconds-from-now 5) (<= seconds-from-now 30))))))
     )
-
   )
 
