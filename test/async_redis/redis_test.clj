@@ -4,9 +4,7 @@
             [clojure.core.async :as async :refer [<!!]]
             [async-redis.redis :as r]))
 
-(println "configure")
 (r/configure "127.0.0.1" 6379 :db 9)
-(println "run")
 
 (deftest test-wrap
   (testing "wrapping nil doesn't return nil"
