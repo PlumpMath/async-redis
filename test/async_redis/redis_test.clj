@@ -72,15 +72,7 @@
 
 (deftest db-override
   (testing "control for db-override" (is (= 9 (<!! (r/db)))))
-  (testing "selected the right DB" (is (= 2 (r/on-db 2 (<!! (r/db))))))
-  (let [key (random-string 20)]
-    (r/just (r/set! key "hi"))
-    (testing "set key in default DB" (is (= "hi" (<!! (r/get key)))))
-    (r/just (r/move! key 7))
-    (testing "key isn't in default DB anymore" (is (= false (<!! (r/get key)))))
-    (testing "and key IS in the new DB now" (is (= "hi" (<!! (r/on-db 7 (r/get key))))))
-    )
-  )
+  (testing "selected the right DB" (is (= 2 (r/on-db 2 (<!! (r/db)))))))
 
 (deftest expiration
   (r/just (r/flush-db!))
@@ -103,3 +95,20 @@
     )
   )
 
+(deftest move
+  (let [key (random-string 20)]
+    (r/just (r/set! key "hi"))
+    (testing "set key in default DB" (is (= "hi" (<!! (r/get key)))))
+    (r/just (r/move! key 7))
+    (testing "key isn't in default DB anymore" (is (= false (<!! (r/get key)))))
+    (testing "and key IS in the new DB now" (is (= "hi" (<!! (r/on-db 7 (r/get key))))))
+    )
+  )
+
+(deftest getset
+  (let [key1 (random-string 20)
+        key2 (random-string 20)]
+    (r/just (r/set! key1 "1"))
+    (testing "control" (is (= "1" (<!! (r/get key1)))))
+    (testing "getset returns right" (is (= "1" (<!! (r/getset! key1 "2")))))
+    (testing "and getset wrote" (is (= "2" (<!! (r/get key1)))))))
