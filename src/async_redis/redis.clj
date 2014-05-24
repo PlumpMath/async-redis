@@ -18,12 +18,18 @@
 (def ^{:private true} *db (ref default-db))
 (def ^{:private true} *pool (ref (chan)))
 
+(def ^:dynamic ^{:private true} *db-override false)
+
 (defn ^{:private true} ensure-db-selected [conn]
-  (let [db (deref *db)]
-    (when (not (= (.getDB conn) db))
-      (.select conn db)
+  (let [db-number (or *db-override (deref *db))]
+    (when (not (= (.getDB conn) db-number))
+      (.select conn db-number)
       (.getBinaryBulkReply conn)))
   conn)
+
+(defmacro on-db [db & body]
+  `(binding [*db-override ~db]
+     ~@body))
 
 (defn connect []
   (let [conn (Client. (deref *host) (deref *port))]
@@ -249,7 +255,6 @@
 
 (defn disconnect [client] (.disconnect client))
 
-(defr select! [db] (->status client (.select client db)))
 
 ;; a bit custom, because .getDB is actually just a simple blocking call.
 (defr db []
@@ -272,6 +277,7 @@
 (defr expire! [key seconds] (->int client (.expire client key seconds)))
 (defr expire-at! [key timestamp] (->int client (.expireAt client key timestamp)))
 (defr ttl [key] (->int client (.ttl client key)))
+
 (defr move! [key db-index] (->int client (.move client key db-index)))
 (defr getset! [key value] (->string client (.getSet client key value)))
 (defr mget [& keys] (->list client (.mget client keys)))
