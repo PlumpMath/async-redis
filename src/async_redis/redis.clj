@@ -280,10 +280,14 @@
 (defr setex! [key seconds value] (->status client (.setex client key seconds value)))
 
 (defr move! [key db-index] (->int client (.move client key db-index)))
+
 (defr getset! [key value] (->string client (.getSet client key value)))
+
 (defr mget [& keys] (->list client (.mget client (into-array String keys))))
+
 (defr setnx! [key value] (->int client (.setnx client key value)))
-(defr mset! [& keysvalues] (->status client (.mset client keysvalues)))
+
+(defr mset! [& keysvalues] (->status client (.mset client (into-array String keysvalues))))
 (defr msetnx [& keysvalues] (->int client (.msetnx client keysvalues)))
 (defr decr-by! [key inc] (->int client (.decrBy client key inc)))
 (defr decr! [key] (->int client (.decr client key)))

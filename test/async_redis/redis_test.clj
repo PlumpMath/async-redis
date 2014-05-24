@@ -135,10 +135,15 @@
     (testing "setnx should no-op second time" (is (= val1 (<!! (r/get key)))))
     ))
 
+(deftest mset
+  (let [keys (take 100 (repeatedly #(random-string 20)))
+        vals (take 100 (repeatedly #(random-string 20)))]
+    (r/just (apply r/mset! (interleave keys vals)))
+    (testing "mset set them all" (is (= vals (<!! (apply r/mget keys)))))))
+
 (deftest concurrent-gets-dont-clobber
   (let [keys (take 100 (repeatedly #(random-string 20))),
         values (take 100 (repeatedly #(random-string 20)))]
-    (println "testing clobbering")
     (doall (map (fn [k v]
                   (r/just (r/set! k v))
                   (testing "I get back my value" (is (= v (<!! (r/get k))))))
