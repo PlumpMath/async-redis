@@ -134,8 +134,8 @@
   )
 
 (deftest concurrent-gets-dont-clobber
-  (let [keys (take 20 (repeatedly #(random-string 20))),
-        values (take 20 (repeatedly #(random-string 20)))]
+  (let [keys (take 100 (repeatedly #(random-string 20))),
+        values (take 100 (repeatedly #(random-string 20)))]
     (map (fn [k v]
            (r/just (r/set! k v))
            (testing "I get back my value" (is (= val (<!! (r/get k))))))
