@@ -81,7 +81,14 @@
     (testing "just checking" (is (= "a value" (<!! (r/get key)))))
     (testing "that there is no TTL for an new key" (is (< (<!! (r/ttl key)) 0)))
 
-    (r/just (r/expire! key 1))
-    (testing "that there is a TTL now" (is (not (= -2 (<!! (r/ttl key)))))))
+    (r/just (r/expire! key 5))
+    (testing "that there is a TTL now" (is (> (<!! (r/ttl key)) 0)))
+
+    (let [time (+ 30 (int (/ (System/currentTimeMillis) 1000)))]
+      (r/just (r/expire-at! key time))
+      (let [seconds-from-now (<!! (r/ttl key))]
+        (testing "expiration time goes through" (is (and (> seconds-from-now 5) (<= seconds-from-now 30))))))
+    )
+
   )
 
