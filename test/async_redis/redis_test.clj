@@ -119,8 +119,17 @@
         vals (take 5 (repeatedly #(random-string 20)))]
     (doall (map (fn [k v] (r/just (r/set! k v))) keys vals))
     (testing "mget" (is (= vals (<!! (apply r/mget keys)))))
-    )
-  )
+    ))
+
+(deftest setnx
+  (let [key (random-string 20)
+        val1 (random-string 20)
+        val2 (random-string 20)]
+    (r/just (r/setnx! key val1))
+    (testing "setnx first time should work" (is (= val1 (<!! (r/get key)))))
+    (r/just (r/setnx! key val2))
+    (testing "setnx should no-op second time" (is (= val1 (<!! (r/get key)))))
+    ))
 
 (deftest concurrent-gets-dont-clobber
   (let [keys (take 100 (repeatedly #(random-string 20))),
