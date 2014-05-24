@@ -106,9 +106,29 @@
   )
 
 (deftest getset
+  (let [key (random-string 20)
+        val1 (random-string 20)
+        val2 (random-string 20)]
+    (r/just (r/set! key val1))
+    (testing "control" (is (= val1 (<!! (r/get key)))))
+    (testing "getset returns right" (is (= val1 (<!! (r/getset! key val2)))))
+    (testing "and getset wrote" (is (= val2 (<!! (r/get key)))))))
+
+(deftest mget
   (let [key1 (random-string 20)
-        key2 (random-string 20)]
-    (r/just (r/set! key1 "1"))
-    (testing "control" (is (= "1" (<!! (r/get key1)))))
-    (testing "getset returns right" (is (= "1" (<!! (r/getset! key1 "2")))))
-    (testing "and getset wrote" (is (= "2" (<!! (r/get key1)))))))
+        key2 (random-string 20)
+        key3 (random-string 20)
+        val1 (random-string 20)
+        val2 (random-string 20)
+        val3 (random-string 20)]
+    (r/just (r/set! key1 val1))
+    (r/just (r/set! key2 val2))
+    (r/just (r/set! key3 val3))
+
+    (testing "control 1" (is (= val1 (<!! (r/get key1)))))
+    (testing "control 2" (is (= val2 (<!! (r/get key2)))))
+    (testing "control 3" (is (= val3 (<!! (r/get key3)))))
+
+    (testing "mget" (is (= (list val1 val2 val3) (<!! (r/mget key1 key2 key3)))))
+    )
+  )
