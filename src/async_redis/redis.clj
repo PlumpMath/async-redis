@@ -1,42 +1,77 @@
 (ns async-redis.redis
   (:refer-clojure :exclude [get type keys set sort eval])
   (:import (java.net.URI)
-           (java.util HashSet LinkedHashSet)
+           (java.util HashSet HashMap LinkedHashSet)
            (redis.clients.jedis Client BinaryClient JedisPubSub BuilderFactory
                                 Tuple SortingParams Protocol JedisPool)
            (redis.clients.util SafeEncoder Slowlog)
            (redis.clients.jedis.exceptions JedisDataException))
-  (:require [clojure.core.async :as async :refer [go >! <! <!! chan]]))
+  (:require [clojure.core.async :as async :refer [go >! <! <!! >!! chan go-loop]]))
+
 
 (def ^{:private true} local-host "127.0.0.1")
 (def ^{:private true} default-port 6379)
-(def ^{:private true} *host local-host)
-(def ^{:private true} *port default-port)
-(def ^{:private true} *pool nil)
 
-;; client pooling
+(def ^{:private true} *host (ref local-host))
+(def ^{:private true} *port (ref default-port))
+(def ^{:private true} *pool (ref (chan)))
 
-(defn configure [host port]
-  (set! *host host)
-  (set! *port port))
+(defn connect []
+     (let [client (Client. (deref *host) (deref *port))]
+       (.connect client)
+       client))
 
-(defmulti connect (fn [& args] (count args)))
-(defmethod connect 0
-  connect-to-configured []
-  (connect *host *port))
-(defmethod connect 2
-  connect-directly [host port]
-  (let [client (Client. host port)]
-    (.connect client)
-    client))
+(defn fill-client-channel [channel num-connections]
+  (go-loop [n num-connections]
+           (when (> n 0)
+             (>! channel (connect))
+             (recur (- n 1)))))
 
-(defn borrow []
-  (if (nil? *pool)
-    (set! *pool (JedisPool. *host *port)))
-  (.getResource *pool))
+(defn configure
+  ([] (fill-client-channel (deref *pool) 1))
+  ([host port]
+     (dosync (ref-set *host host)
+             (ref-set *port port)
+             (ref-set *pool (chan))
+             (fill-client-channel (deref *pool) 5))))
 
-(defn return [client] (.returnResourceObject *pool client))
+(defn <conn [] (<!! (deref *pool)))
+(defn >conn [conn] (>!! (deref *pool) conn))
 
+(defmacro w-client
+  [& body]
+  `(let [~'client (<conn)]
+     (++client ~'client)
+     (let [ret# ((fn [] ~@body))]
+       (--client ~'client)
+       ret#)))
+
+(defmacro defr
+  "Creates a function which checks out a connection to use for the scope of the function"
+  [fn-name & args]
+  (if (vector? (first args))
+    (let [fn-args (first args) body (rest args)]
+       `(defn ~fn-name ~fn-args (w-client ~@body)))
+    (if (= 2 (count args))
+      (let [first-form (first args)
+            second-form (second args)
+            first-args (first first-form)
+            first-body (rest first-form)
+            second-args (first second-form)
+            second-body (rest second-form)]
+        `(defn ~fn-name
+           (~first-args (w-client ~@first-body))
+           (~second-args (w-client ~@second-body))))
+      `(didnt-implement-this-case))))
+
+(defmacro defmethod-r [base-name
+                       function-pattern
+                       specific-name
+                       args
+                       & body]
+  `(defmethod ~base-name ~function-pattern
+     ~specific-name ~args
+     (w-client ~@body)))
 
 ;; channels can't take null values, so we're going to proxy with false
 
@@ -46,19 +81,27 @@
 
 ;; the trick for putting results of operations onto channels
 
-(defn with-chan-owned [client f]
-  (let [c (chan)]
-    (go (>! c (f)))
-    c))
+(def ^{:private true} *client-refcounts (HashMap.))
 
-(defn with-chan-borrowed [client f]
-  (let [c (chan)]
-    (go (>! c (f))
-        (return client))
-    c))
+(defn ^{:private true} ++client
+  [client]
+  (dosync
+   (.put *client-refcounts client (+ 1 (or (.get *client-refcounts client) 0)))))
 
-(def ^:dynamic with-chan with-chan-owned)
+(defn ^{:private true} --client
+  [client]
+  (dosync
+   (let [current-count (or (.get *client-refcounts client) 0)]
+     (if (= 1 current-count)
+       (let [] (.remove *client-refcounts client) (>conn client))
+       (.put *client-refcounts client (- current-count 1))))))
 
+(defn with-chan [client f]
+  (when client (++client client))
+  (let [result-chan (chan 1)]
+    (go (>! result-chan (f))
+        (when client (--client client)))
+    result-chan))
 
 (defn get-status-code-reply [client]
   (let [bytes (.getBinaryBulkReply client)]
@@ -66,7 +109,7 @@
           :else (SafeEncoder/encode bytes))))
 
 (defn check-multi [client]
-  (if (.isInMulti client)
+  (when (.isInMulti client)
     (throw (JedisDataException. "Can only use transactions when in multi mode"))))
 
 (defmacro non-multi [client & body]
@@ -194,407 +237,256 @@
                               tuple-set#)))))
 
 
-(defn disconnect* [client] (.disconnect client))
-(def ^:dynamic disconnect disconnect*)
-
-(defn select* [client db] (->status client (.select client db)))
-(def ^:dynamic select select*)
-
-(defn db* [client] (.getDB client))
-(def ^:dynamic db db*)
-
-(defn flush-db* [client] (->status client (.flushDB client)))
-(def ^:dynamic flush-db flush-db*)
-
-(defn get* [client key] (->string client (.get client key)))
-(def ^:dynamic get get*)
-
-(defn exists* [client key] (->boolean client (.exists client key)))
-(def ^:dynamic exists exists*)
-
-(defn del* [client & keys] (->int client (.del client (into-array String keys))))
-(def ^:dynamic del del*)
-
-(defn type* [client key] (->status client (.type client key)))
-(def ^:dynamic type type*)
-
-(defn keys* [client pattern] (->list client (.keys client pattern)))
-(def ^:dynamic keys keys*)
-
-(defn random-key* [client] (->string client (.randomKey client)))
-(def ^:dynamic random-key random-key*)
-
-(defn rename* [client old-key new-key] (->status client (.rename client old-key new-key)))
-(def ^:dynamic rename rename*)
-
-(defn renamenx* [client old-key new-key] (->int client (.renamenx client old-key new-key)))
-(def ^:dynamic renamenx renamenx*)
-
-(defn expire* [client key seconds] (->int client (.expire client key seconds)))
-(def ^:dynamic expire expire*)
-
-(defn expire-at* [client key timestamp] (->int client (.expireAt client key timestamp)))
-(def ^:dynamic expire-at expire-at*)
-
-(defn ttl* [client key] (->int client (.ttl client key)))
-(def ^:dynamic ttl ttl*)
-
-(defn move* [client key db-index] (->int client (.move client key db-index)))
-(def ^:dynamic move move*)
-
-(defn getset* [client key value] (->string client (.getSet client key value)))
-(def ^:dynamic getset getset*)
-
-(defn mget* [client & keys] (->list client (.mget client keys)))
-(def ^:dynamic mget mget*)
-
-(defn setnx* [client key value] (->int client (.setnx client key value)))
-(def ^:dynamic setnx setnx*)
-
-(defn setex* [client key seconds value] (->status client (.setex client key seconds value)))
-(def ^:dynamic setex setex*)
-
-(defn mset* [client & keysvalues] (->status client (.mset client keysvalues)))
-(def ^:dynamic mset mset*)
-
-(defn msetnx* [client & keysvalues] (->int client (.msetnx client keysvalues)))
-(def ^:dynamic msetnx msetnx*)
-
-(defn decr-by* [client key inc] (->int client (.decrBy client key inc)))
-(def ^:dynamic decr-by decr-by*)
-
-(defn decr* [client key] (->int client (.decr client key)))
-(def ^:dynamic decr decr*)
-
-(defn incr-by* [client key inc] (->int client (.incrBy client key inc)))
-(def ^:dynamic incr-by incr-by*)
-
-(defn incr* [client key] (->int client (.incr client key)))
-(def ^:dynamic incr incr*)
-
-(defn append* [client key value] (->int client (.append client key value)))
-(def ^:dynamic append append*)
-
-(defn substr* [client key start end] (->string client (.substr client key start end)))
-(def ^:dynamic substr substr*)
-
-
-(defn hset* [client key field value] (->int client (.hset client key field value)))
-(def ^:dynamic hset hset*)
-
-(defn hget* [client key field] (->string client (.hget client key field)))
-(def ^:dynamic hget hget*)
-
-(defn hsetnx* [client key field value] (->int client (.hsetnx client key field value)))
-(def ^:dynamic hsetnx hsetnx*)
-
-(defn hmset* [client key hash] (->status client (.hmset client key hash)))
-(def ^:dynamic hmset hmset*)
-
-(defn hmget* [client key & fields] (->status client (.hmget client key fields)))
-(def ^:dynamic hmget hmget*)
-
-(defn hincr-by* [client key field inc] (->int client (.hincrBy client key field inc)))
-(def ^:dynamic hincr-by hincr-by*)
-
-(defn hexists* [client key field] (->boolean client (.hexists client key field)))
-(def ^:dynamic hexists hexists*)
-
-(defn hdel* [client key & fields] (->int client (.hdel client key fields)))
-(def ^:dynamic hdel hdel*)
-
-(defn hlen* [client key] (->int client (.hlen client key)))
-(def ^:dynamic hlen hlen*)
-
-(defn hkeys* [client key] (->set client (.hkeys client key)))
-(def ^:dynamic hkeys hkeys*)
-
-(defn hvals* [client key] (->list client (.hvals client key)))
-(def ^:dynamic hvals hvals*)
-
-(defn hgetall* [client key] (->map client (.hgetAll client key)))
-(def ^:dynamic hgetall hgetall*)
-
-
-
-(defn rpush* [client key & strings] (->int client (.rpush client key strings)))
-(def ^:dynamic rpush rpush*)
-
-(defn lpush* [client key & strings] (->int client (.lpush client key strings)))
-(def ^:dynamic lpush lpush*)
-
-(defn llen* [client key] (->int client (.llen client key)))
-(def ^:dynamic llen llen*)
-
-(defn lrange* [client key start end] (->list client (.lrange client key start end)))
-(def ^:dynamic lrange lrange*)
-
-(defn ltrim* [client key start end] (->status client (.ltrim client key start end)))
-(def ^:dynamic ltrim ltrim*)
-
-(defn lindex* [client key index] (->string client (.lindex client key index)))
-(def ^:dynamic lindex lindex*)
-
-(defn lset* [client key index value] (->status client (.lset client key index value)))
-(def ^:dynamic lset lset*)
-
-(defn lrem* [client key count value] (->int client (.lrem client key count value)))
-(def ^:dynamic lrem lrem*)
-
-(defn lpop* [client key] (->string client (.lpop client key)))
-(def ^:dynamic lpop lpop*)
-
-(defn rpop* [client key] (->string client (.rpop client key)))
-(def ^:dynamic rpop rpop*)
-
-(defn rpoplpush* [client src-key dest-key] (->string client (.rpoplpush client src-key dest-key)))
-(def ^:dynamic rpoplpush rpoplpush*)
-
-
-
-(defn sadd* [client key & members] (->int client (.sadd client key members)))
-(def ^:dynamic sadd sadd*)
-
-(defn smembers* [client key] (->list>set client (.smembers client key)))
-(def ^:dynamic smembers smembers*)
-
-(defn srem* [client key & members] (->int client (.srem client key members)))
-(def ^:dynamic srem srem*)
-
-(defn spop* [client key] (->string client (.spop client key)))
-(def ^:dynamic spop spop*)
-
-(defn smove* [client src-key dest-key member] (->int client (.smove client src-key dest-key member)))
-(def ^:dynamic smove smove*)
-
-(defn scard* [client key] (->int client (.scard client key)))
-(def ^:dynamic scard scard*)
-
-(defn sismember* [client key member] (->boolean client (.sismember client key member)))
-(def ^:dynamic sismember sismember*)
-
-(defn sinter* [client & keys] (->list>set client (.sinter client keys)))
-(def ^:dynamic sinter sinter*)
-
-(defn sinterstore* [client dest-key & keys] (->int client (.sinterstore client dest-key keys)))
-(def ^:dynamic sinterstore sinterstore*)
-
-(defn sunion* [client & keys] (->list>set client (.sunion client keys)))
-(def ^:dynamic sunion sunion*)
-
-(defn sunionstore* [client dest-key & keys] (->int client (.sunionstore client dest-key keys)))
-(def ^:dynamic sunionstore sunionstore*)
-
-(defn sdiff* [client & keys] (->set client (.sdiff client keys)))
-(def ^:dynamic sdiff sdiff*)
-
-(defn sdiffstore* [client dest-key & keys] (->int client (.sdiffstore dest-key keys)))
-(def ^:dynamic sdiffstore sdiffstore*)
-
-(defn srandmember*
-  ([client key] (->string client (.srandmember client key)))
-  ([client key count] (->list client (.srandmember client key count))))
-(def ^:dynamic srandmember srandmember*)
-
-(defn zadd*
-  ([client key score member] (->int client (.zadd client key score member)))
-  ([client key map] (->int client (.zadd client key map))))
-(def ^:dynamic zadd zadd*)
-
-(defn zrange* [client key start end] (->list>lset client (.zrange client key start end)))
-(def ^:dynamic zrange zrange*)
-
-(defn zrem* [client key & members] (->int client (.zrem client key members)))
-(def ^:dynamic zrem zrem*)
-
-(defn zincr-by* [client key score member] (->double client (.zincrby client key score member)))
-(def ^:dynamic zincr-by zincr-by*)
-
-(defn zrank* [client key member] (->int client (.zrank client key member)))
-(def ^:dynamic zrank zrank*)
-
-(defn zrevrank* [client key member] (->int client (.zrevrank client key member)))
-(def ^:dynamic zrevrank zrevrank*)
-
-(defn zrevrange* [client key start end] (->list>lset client (.zrevrange client key start end)))
-(def ^:dynamic zrevrange zrevrange*)
-
-(defn zrange-with-scores* [client key start end] (->tupled-set client (.zrangeWithScores client key start end)))
-(def ^:dynamic zrange-with-scores zrange-with-scores*)
-
-(defn zrevrange-with-scores* [client key start end] (->tupled-set client (.zrevrangeWithScores client key start end)))
-(def ^:dynamic zrevrange-with-scores zrevrange-with-scores*)
-
-(defn zcard* [client key] (->int client (.zcard client key)))
-(def ^:dynamic zcard zcard*)
-
-(defn zscore* [client key member] (->double client (.zscore client key member)))
-(def ^:dynamic zscore zscore*)
-
-(defn watch* [client & keys] (->status-multi client (.watch client keys)))
-(def ^:dynamic watch watch*)
-
-(defmulti sort* (fn [& args] [(nth args 2 false) (> (count args) 3)]))
-(defmethod sort* [false false] sort-simple [client key] (->list client (.sort client key)))
-(defmethod sort* [:SortingParams :false] sort-with-params [client key sort-params] (->list client (.sort client key #^SortParams sort-params)))
-(defmethod sort* [:String :false] sort-to-dest [client key dest-key] (->int client (.sort client key #^String dest-key)))
-(defmethod sort* [:SortingParams :true] sort-with-params-to-dest [client key sort-params dest-key] (->int client (.sort client key sort-params dest-key)))
-(def ^:dynamic sort sort*)
-
-(defmulti blpop* (fn [client & args] (first args)))
-(defmethod blpop* :Integer
-  blpop-timeout [client timeout & keys] (->blocking:list client (.blpop client (conj keys (str timeout)))))
-(defmethod blpop* :String
-  blpop-timeout [client & keys] (->blocking:list client (.blpop client keys)))
-(def ^:dynamic blpop blpop*)
-
-(defn brpop* [client & keys] (->blocking:list client (.brpop keys)))
-(def ^:dynamic brpop brpop*)
-
-(defmulti zcount* (fn [client key min max] [client key min max]))
-(defmethod zcount* [:Object :String :Double :Double]
+(defn disconnect [client] (.disconnect client))
+
+(defr select! [db] (->status client (.select client db)))
+
+(defr db [] (.getDB client))
+(defr flush-db! [] (->status client (.flushDB client)))
+
+(defr exists? [key] (->boolean client (.exists client key)))
+(defr del! [& keys] (->int client (.del client (into-array String keys))))
+(defr type [key] (->status client (.type client key)))
+(defr keys [pattern] (->list client (.keys client pattern)))
+(defr random-key [] (->string client (.randomKey client)))
+(defr rename! [old-key new-key] (->status client (.rename client old-key new-key)))
+(defr renamenx! [old-key new-key] (->int client (.renamenx client old-key new-key)))
+
+(defr get [key] (->string client (.get client key)))
+(defr expire! [key seconds] (->int client (.expire client key seconds)))
+(defr expire-at! [key timestamp] (->int client (.expireAt client key timestamp)))
+(defr ttl [key] (->int client (.ttl client key)))
+(defr move! [key db-index] (->int client (.move client key db-index)))
+(defr getset! [key value] (->string client (.getSet client key value)))
+(defr mget [& keys] (->list client (.mget client keys)))
+(defr setnx! [key value] (->int client (.setnx client key value)))
+(defr setex! [key seconds value] (->status client (.setex client key seconds value)))
+(defr mset! [& keysvalues] (->status client (.mset client keysvalues)))
+(defr msetnx [& keysvalues] (->int client (.msetnx client keysvalues)))
+(defr decr-by! [key inc] (->int client (.decrBy client key inc)))
+(defr decr! [key] (->int client (.decr client key)))
+(defr incr-by! [key inc] (->int client (.incrBy client key inc)))
+(defr incr! [client key] (->int client (.incr client key)))
+(defr append! [key value] (->int client (.append client key value)))
+(defr substr [key start end] (->string client (.substr client key start end)))
+
+(defr hset! [key field value] (->int client (.hset client key field value)))
+(defr hget [key field] (->string client (.hget client key field)))
+(defr hsetnx! [key field value] (->int client (.hsetnx client key field value)))
+(defr hmset! [key hash] (->status client (.hmset client key hash)))
+(defr hmget [key & fields] (->status client (.hmget client key fields)))
+(defr hincr-by! [key field inc] (->int client (.hincrBy client key field inc)))
+(defr hexists? [key field] (->boolean client (.hexists client key field)))
+(defr hdel! [key & fields] (->int client (.hdel client key fields)))
+(defr hlen [key] (->int client (.hlen client key)))
+(defr hkeys [key] (->set client (.hkeys client key)))
+(defr hvals [key] (->list client (.hvals client key)))
+(defr hgetall [client key] (->map client (.hgetAll client key)))
+
+(defr rpush! [key & strings] (->int client (.rpush client key strings)))
+(defr lpush! [key & strings] (->int client (.lpush client key strings)))
+(defr llen [key] (->int client (.llen client key)))
+(defr lrange [client key start end] (->list client (.lrange client key start end)))
+(defr ltrim! [key start end] (->status client (.ltrim client key start end)))
+(defr lindex [key index] (->string client (.lindex client key index)))
+(defr lset! [key index value] (->status client (.lset client key index value)))
+(defr lrem! [key count value] (->int client (.lrem client key count value)))
+(defr lpop! [key] (->string client (.lpop client key)))
+(defr rpop! [key] (->string client (.rpop client key)))
+(defr rpoplpush! [src-key dest-key] (->string client (.rpoplpush client src-key dest-key)))
+
+(defr sadd! [key & members] (->int client (.sadd client key members)))
+(defr smembers [key] (->list>set client (.smembers client key)))
+(defr srem! [key & members] (->int client (.srem client key members)))
+(defr spop! [key] (->string client (.spop client key)))
+(defr smove! [src-key dest-key member] (->int client (.smove client src-key dest-key member)))
+(defr scard [key] (->int client (.scard client key)))
+(defr sismember? [key member] (->boolean client (.sismember client key member)))
+(defr sinter [& keys] (->list>set client (.sinter client keys)))
+(defr sinterstore! [dest-key & keys] (->int client (.sinterstore client dest-key keys)))
+(defr sunion [& keys] (->list>set client (.sunion client keys)))
+(defr sunionstore! [dest-key & keys] (->int client (.sunionstore client dest-key keys)))
+(defr sdiff [& keys] (->set client (.sdiff client keys)))
+(defr sdiffstore! [dest-key & keys] (->int client (.sdiffstore dest-key keys)))
+(defr srandmember
+  ([key] (->string client (.srandmember client key)))
+  ([key count] (->list client (.srandmember client key count))))
+
+(defr zadd!
+  ([key score member] (->int client (.zadd client key score member)))
+  ([key map] (->int client (.zadd client key map))))
+
+(defr zrange [key start end] (->list>lset client (.zrange client key start end)))
+(defr zrem! [key & members] (->int client (.zrem client key members)))
+(defr zincr-by! [key score member] (->double client (.zincrby client key score member)))
+(defr zrank [key member] (->int client (.zrank client key member)))
+(defr zrevrank [key member] (->int client (.zrevrank client key member)))
+(defr zrevrange [key start end] (->list>lset client (.zrevrange client key start end)))
+(defr zrange-with-scores [key start end] (->tupled-set client (.zrangeWithScores client key start end)))
+(defr zrevrange-with-scores [key start end] (->tupled-set client (.zrevrangeWithScores client key start end)))
+(defr zcard [key] (->int client (.zcard client key)))
+(defr zscore [key member] (->double client (.zscore client key member)))
+(defr watch [& keys] (->status-multi client (.watch client keys)))
+
+(defr sort [key] (->list client (.sort client key)))
+(defr sort-with-params [key sort-params](->list client (.sort client key #^SortParams sort-params)))
+(defr sort-into-dest! [key dest-key] (->int client (.sort client key #^String dest-key)))
+(defr sort-with-params-into-dest [key sort-params dest-key] (->int client (.sort client key sort-params dest-key)))
+
+(defr blpop! [& keys] (->blocking:list client (.blpop client keys)))
+(defr timeout-blpop! [timeout & keys] (->blocking:list client (.blpop client (conj keys (str timeout)))))
+
+(defr brpop! [& keys] (->blocking:list client (.brpop keys)))
+
+(defmulti zcount (fn [key min max] [key min max]))
+(defmethod-r zcount [:String :Double :Double]
   zcount-doubles [client key min max]
   (->int client (.zcount client key #^Double min #^Double max)))
-(defmethod zcount* [:Object :String :String :String]
+(defmethod-r zcount [:String :String :String]
   zcount-strings [client key min max]
   (->int client (.zcount client key #^String min #^String max)))
-(def ^:dynamic zcount zcount*)
 
-(defmulti zrange-by-score* (fn [client key min max & optional] [client key min max]))
-(defmethod zrange-by-score* [:Object :String :Double :Double]
-  zrange-by-score-doubles [client key min max & optional]
+(defmulti zrange-by-score (fn [key min max & optional] [key min max]))
+(defmethod-r zrange-by-score [:String :Double :Double]
+  zrange-by-score-doubles
+  [key min max & optional]
   (if (empty? optional)
     (->list>lset client (.zrangeByScore client key #^Double min #^Double max))
     (let [offset (first optional)
           count (second optional)]
       (->list>lset client (.zrangeByScore client key #^Double min #^Double max offset count)))))
-(defmethod zrange-by-score* [:Object :String :String :String]
-  zrange-by-score-strings [client key min max & optional]
+(defmethod-r zrange-by-score [:String :String :String]
+  zrange-by-score-strings
+  [key min max & optional]
   (if (empty? optional)
     (->list>lset client (.zrangeByScore client key #^String min #^String max))
     (let [offset (first optional)
           count (second optional)]
       (->list>lset client (.zrangeByScore client key #^String min #^String max offset count)))))
-(def ^:dynamic zrange-by-score zrange-by-score*)
 
-(defmulti zrange-by-score-with-scores* (fn [client key min max & optional] [client key min max]))
-(defmethod zrange-by-score-with-scores* [:Object :String :Double :Double]
-  zrange-by-score-with-score-doubles [client key min max & optional]
+(defmulti zrange-by-score-with-scores (fn [key min max & optional] [key min max]))
+(defmethod-r zrange-by-score-with-scores
+  [:String :Double :Double]
+  zrange-by-score-with-score-doubles
+  [key min max & optional]
   (if (empty? optional)
     (->tupled-set client (.zrangeByScoreWithScores client key #^Double min #^Double max))
     (let [offset (first optional)
           count (second optional)]
       (->tupled-set client (.zrangeByScoreWithScores client key #^Double min #^Double max offset count)))))
-(defmethod zrange-by-score-with-scores* [:Object :String :String :String]
-  zrange-by-score-with-score-strings [client key min max & optional]
+(defmethod-r zrange-by-score-with-scores
+  [:String :String :String]
+  zrange-by-score-with-score-strings
+  [key min max & optional]
   (if (empty? optional)
     (->tupled-set client (.zrangeByScoreWithScores client key #^String min #^String max))
     (let [offset (first optional)
           count (second optional)]
       (->tupled-set client (.zrangeByScoreWithScores client key #^String min #^String max offset count)))))
-(def ^:dynamic zrange-by-score-with-scores zrange-by-score-with-scores*)
 
-(defmulti zrevrange-by-score* (fn [client key min max & optional] [client key min max]))
-(defmethod zrevrange-by-score* [:Object :String :Double :Double]
-  zrevrange-by-score-doubles [client key min max & optional]
+(defmulti zrevrange-by-score (fn [key min max & optional] [key min max]))
+(defmethod-r zrevrange-by-score
+  [:String :Double :Double]
+  zrevrange-by-score-doubles
+  [key min max & optional]
   (if (empty? optional)
     (->list>lset client (.zrevrangeByScore client key #^Double min #^Double max))
     (let [offset (first optional)
           count (second optional)]
       (->list>lset client (.zrevrangeByScore client key #^Double min #^Double max offset count)))))
-(defmethod zrevrange-by-score* [:Object :String :String :String]
-  zrevrange-by-score-strings [client key min max & optional]
+(defmethod-r zrevrange-by-score
+  [:String :String :String]
+  zrevrange-by-score-strings
+  [key min max & optional]
   (if (empty? optional)
     (->list>lset client (.zrevrangeByScore client key #^String min #^String max))
     (let [offset (first optional)
           count (second optional)]
       (->list>lset client (.zrevrangeByScore client key #^String min #^String max offset count)))))
-(def ^:dynamic zrevrange-by-score zrevrange-by-score*)
 
-(defmulti zrevrange-by-score-with-scores* (fn [client key min max & optional] [client key min max]))
-(defmethod zrevrange-by-score-with-scores* [:Object :String :Double :Double]
-  zrevrange-by-score-with-score-doubles [client key min max & optional]
+(defmulti zrevrange-by-score-with-scores (fn [key min max & optional] [key min max]))
+(defmethod-r zrevrange-by-score-with-scores
+  [:String :Double :Double]
+  zrevrange-by-score-with-score-doubles
+  [key min max & optional]
   (if (empty? optional)
     (->tupled-set client (.zrevrangeByScoreWithScores client key #^Double min #^Double max))
     (let [offset (first optional)
           count (second optional)]
       (->tupled-set client (.zrevrangeByScoreWithScores client key #^Double min #^Double max offset count)))))
-(defmethod zrevrange-by-score-with-scores* [:Object :String :String :String]
-  zrevrange-by-score-with-score-strings [client key min max & optional]
+(defmethod-r zrevrange-by-score-with-scores
+  [:String :String :String]
+  zrevrange-by-score-with-score-strings
+  [key min max & optional]
   (if (empty? optional)
     (->tupled-set client (.zrevrangeByScoreWithScores client key #^String min #^String max))
     (let [offset (first optional)
           count (second optional)]
       (->tupled-set client (.zrevrangeByScoreWithScores client key #^String min #^String max offset count)))))
-(def ^:dynamic zrevrange-by-score-with-scores zrevrange-by-score-with-scores*)
 
-(defn zremrange-by-rank* [client key start end] (->int client (.zremrangeByRank key start end)))
-(def ^:dynamic zremrange-by-rank zremrange-by-rank*)
+(defr zremrange-by-rank [key start end] (->int client (.zremrangeByRank key start end)))
 
-(defmulti zremrange-by-score* (fn [client key start end] [client key start end]))
-(defmethod zremrange-by-score* [:Object :String :Double :Double]
-  zremrange-by-score-doubles [client key start end]
+(defmulti zremrange-by-score (fn [key start end] [key start end]))
+(defmethod-r zremrange-by-score
+  [:String :Double :Double]
+  zremrange-by-score-doubles
+  [key start end]
   (->int client (.zremrangeByScore client key #^Double start #^Double end)))
-(defmethod zremrange-by-score* [:Object :String :String :String]
-  zremrange-by-score-strings [client key start end]
+(defmethod-r zremrange-by-score
+  [:String :String :String]
+  zremrange-by-score-strings
+  [key start end]
   (->int client (.zremrangeByScore client key #^String start #^String end)))
-(def ^:dynamic zremrange-by-score zremrange-by-score*)
 
-(defmulti zunionstore* (fn [client dest-key & args] (first args)))
-(defmethod zunionstore* :String
-  zunionstore-normal [client dest-key & keys] (->int client (.zunionstore client dest-key keys)))
-(defmethod zunionstore* :redis.clients.jedis.ZParams
-  zunionstore-with-params [client dest-key params & keys] (->int client (.zunionstore client dest-key params keys)))
-(def ^:dynamic zunionstore zunionstore*)
+(defmulti zunionstore (fn [dest-key & args] (first args)))
+(defmethod-r zunionstore
+  :String
+  zunionstore-normal
+  [dest-key & keys]
+  (->int client (.zunionstore client dest-key keys)))
+(defmethod-r zunionstore
+  :redis.clients.jedis.ZParams
+  zunionstore-with-params
+  [dest-key params & keys] (->int client (.zunionstore client dest-key params keys)))
 
-(defmulti zinterstore* (fn [client dest-key & args] (first args)))
-(defmethod zinterstore* :String
-  zinterstore-normal [client dest-key & keys] (->int client (.zinterstore client dest-key keys)))
-(defmethod zinterstore* :redis.clients.jedis.ZParams
-  zinterstore-with-params [client dest-key params & keys] (->int client (.zinterstore client dest-key params keys)))
-(def ^:dynamic zinterstore zinterstore*)
+(defmulti zinterstore (fn [dest-key & args] (first args)))
+(defmethod-r zinterstore
+  :String
+  zinterstore-normal
+  [dest-key & keys]
+  (->int client (.zinterstore client dest-key keys)))
+(defmethod-r zinterstore
+  :redis.clients.jedis.ZParams
+  zinterstore-with-params
+  [dest-key params & keys]
+  (->int client (.zinterstore client dest-key params keys)))
 
-(defn strlen* [client key] (->string client (.strlen client key)))
-(def ^:dynamic strlen strlen*)
-
-(defn lpushx* [client key & strings] (->int client (.lpushx client key strings)))
-(def ^:dynamic lpushx lpushx*)
-
-(defn persist* [client key] (->int client (.persist client key)))
-(def ^:dynamic persist persist*)
-
-(defn rpushx* [client key & strings] (->int (.rpushx client key strings)))
-(def ^:dynamic rpushx rpushx*)
-
-(defn echo* [client string] (->string (.echo client string)))
-(def ^:dynamic echo echo*)
-
-(defn linsert* [client key where pivot value] (->int (.linsert client key where pivot value)))
-(def ^:dynamic linsert linsert*)
-
-(defn brpoplpush* [client source dest timeout] (->blocking:string client (.brpoplpush client source dest timeout)))
-(def ^:dynamic brpoplpush brpoplpush*)
+(defr strlen [key] (->string client (.strlen client key)))
+(defr lpushx! [key & strings] (->int client (.lpushx client key strings)))
+(defr persist! [key] (->int client (.persist client key)))
+(defr rpushx! [key & strings] (->int (.rpushx client key strings)))
+(defr echo [string] (->string (.echo client string)))
+(defr linsert! [key where pivot value] (->int (.linsert client key where pivot value)))
+(defr brpoplpush! [source dest timeout] (->blocking:string client (.brpoplpush client source dest timeout)))
 
 
-(defmulti setbit* (fn [client offset value] value))
-(defmethod setbit* :Boolean setbit-bool [client offset value] (->boolean client (.setbit client key offset #^Boolean value)))
-(defmethod setbit* :String setbit-bool [client offset value] (->boolean client (.setbit client key offset #^String value)))
-(def ^:dynamic setbit setbit*)
+(defmulti setbit! (fn [client offset value] value))
+(defmethod-r setbit!
+  :Boolean
+  setbit-bool
+  [offset value]
+  (->boolean client (.setbit client key offset #^Boolean value)))
+(defmethod-r setbit!
+  :String
+  setbit-bool
+  [offset value]
+  (->boolean client (.setbit client key offset #^String value)))
 
-(defn getbit* [client key offset] (->boolean client (.getbit client key offset)))
-(def ^:dynamic getbit getbit*)
-
-(defn setrange* [client key offset value] (->int client (.setrange client key offset value)))
-(def ^:dynamic setrange setrange*)
-
-(defn getrange* [client key start-offset end-offset] (->string client (.getrange client key start-offset end-offset)))
-(def ^:dynamic getrange getrange*)
-
-(defn config-get* [client pattern] (->list client (.configGet client pattern)))
-(def ^:dynamic config-get config-get*)
-
-(defn config-set* [client param val] (->status client (.configSet client param val)))
-(def ^:dynamic config-set config-set*)
+(defr getbit [key offset] (->boolean client (.getbit client key offset)))
+(defr setrange! [key offset value] (->int client (.setrange client key offset value)))
+(defr getrange [key start-offset end-offset] (->string client (.getrange client key start-offset end-offset)))
+(defr config-get [pattern] (->list client (.configGet client pattern)))
+(defr config-set! [param val] (->status client (.configSet client param val)))
 
 (defn ^{:private true} get-eval-result [client]
   (let [result (.getOne client)]
@@ -621,302 +513,116 @@
                     (.rollbackTimeout client)
                     result))))
 
-(defn eval-params* [keys values] (into-array String (interleave keys values)))
-(def ^:dynamic eval-params eval-params*)
+(defn eval-params [keys values] (into-array String (interleave keys values)))
 
-(defmulti eval* (fn [client script & optional] (if (nil? optional) false (first optional))))
-(defmethod eval* false [client script] (*eval client script 0))
-(defmethod eval* :Integer [& params] (apply *eval params))
-(defmethod eval* :List<String> [client script keys params] (*eval client script (count keys) (eval-params params)))
-(def ^:dynamic eval eval*)
+(defmulti eval (fn [script & optional] (if (nil? optional) false (first optional))))
+(defmethod-r eval false eval-1 [script] (eval client script 0))
+(defmethod-r eval :Integer eval-2 [& params] (apply eval params))
+(defmethod-r eval :List<String> eval-3 [script keys params] (*eval client script (count keys) (eval-params params)))
 
 
-(defmulti evalsha* (fn [client sha1 & optional] (if (nil? optional) false (first optional))))
-(defmethod evalsha* false [client sha1] (*evalsha client sha1 0))
-(defmethod evalsha* :Integer [& params] (apply *evalsha params))
-(defmethod evalsha* :List<String> [client sha1 keys params] (*evalsha client sha1 (count keys) (eval-params params)))
-(def ^:dynamic evalsha evalsha*)
+(defmulti evalsha (fn [sha1 & optional] (if (nil? optional) false (first optional))))
+(defmethod-r evalsha false evalsha-1 [sha1] (evalsha client sha1 0))
+(defmethod-r evalsha :Integer evalsha-2 [& params] (apply evalsha params))
+(defmethod-r evalsha :List<String> evalsha-3 [sha1 keys params] (evalsha sha1 (count keys) (eval-params params)))
 
-(defn scripts-exist?* [client & sha1s]
+(defr scripts-exist? [& sha1s]
   (let [c (chan)]
     (go
-     (.scriptExists client (into-array String sha1s))
-     (>! c (map (fn [i] (= i 1)) (.getIntegerMultiBulkReply client))))
-    c))
-(def ^:dynamic scripts-exist? scripts-exist?*)
+     (w-client
+      (.scriptExists client (into-array String sha1s))
+      (>! c (map (fn [i] (= i 1)) (.getIntegerMultiBulkReply client)))))
+     c))
 
-(defn script-exists?* [client sha1]
-  (let [c (scripts-exist?* client sha1)
+(defr script-exists? [sha1]
+  (let [c (scripts-exist? client sha1)
         c2 (chan)]
-    (go (let [replies (<! c)]
-          (>! c2 (first replies))))
-    c2))
-(def ^:dynamic script-exists? script-exists?*)
+    (go (with-chan
+         (let [replies (<! c)]
+           (>! c2 (first replies)))))
+        c2))
 
-(defn script-load* [client script] (->string client (.scriptLoad client script)))
-(def ^:dynamic script-load script-load*)
+(defr script-load [script] (->string client (.scriptLoad client script)))
 
-(defmulti slowlog-get* (fn [client & args] (empty? args)))
-(defmethod slowlog-get* :false [client]
+(defmulti slowlog-get (fn [& args] (empty? args)))
+(defmethod-r slowlog-get :true slowlog-empty []
   (with-chan client
              (fn []
                (.slowlogGet client)
                (Slowlog/from (.getObjectMultiBulkReply client)))))
-(defmethod slowlog-get* :true [client & entries]
+(defmethod-r slowlog-get :false slowlog-entries [& entries]
   (with-chan client
              (fn []
                (.slowlogGet client entries)
                (Slowlog/from (.getObjectMultiBulkReply client)))))
-(def ^:dynamic slowlog-get slowlog-get*)
 
-(defn object-refcount* [client string] (->int client (.objectRefcount client string)))
-(def ^:dynamic object-refcount object-refcount*)
+(defr object-refcount [string] (->int client (.objectRefcount client string)))
+(defr object-encoding [string] (->string client (.objectEncoding client string)))
+(defr object-idletime [string] (->string client (.objectIdletime client string)))
+(defr bitcount [key start end] (->int client (.bitcount client key start end)))
+(defr bitop! [op dest-key & src-keys] (->int client (.bitop op dest-key src-keys)))
 
-(defn object-encoding* [client string] (->string client (.objectEncoding client string)))
-(def ^:dynamic object-encoding object-encoding*)
-
-(defn object-idletime* [client string] (->string client (.objectIdletime client string)))
-(def ^:dynamic object-idletime object-idletime*)
-
-(defn bitcount* [client key start end] (->int client (.bitcount client key start end)))
-(def ^:dynamic bitcount bitcount*)
-
-(defn bitop* [client op dest-key & src-keys] (->int client (.bitop op dest-key src-keys)))
-(def ^:dynamic bitop bitop*)
-
-(defn sentinel-masters* [client]
+(defr sentinel-masters []
   (with-chan client
              (fn []
                (.sentinel client Protocol/SENTINEL_MASTERS)
                (map (fn [o] (.build BuilderFactory/STRING_MAP o)) (.getObjectMultiBulkReply client)))))
-(def ^:dynamic sentinel-masters sentinel-masters*)
 
-(defn sentinel-get-master-addr-by-name* [client master-name]
+(defr sentinel-get-master-addr-by-name [master-name]
   (with-chan client
              (fn []
                (.sentinel client Protocol/SENTINEL_GET_MASTER_ADDR_BY_NAME master-name)
                (.build BuilderFactory/STRING_LIST (.getObjectMultiBulkReply client)))))
-(def ^:dynamic sentinel-get-master-addr-by-name sentinel-get-master-addr-by-name*)
 
-(defn sentinel-reset* [client pattern] (->int client (.sentinel client Protocol/SENTINEL_RESET pattern)))
-(def ^:dynamic sentinel-reset sentinel-reset*)
+(defr sentinel-reset! [pattern] (->int client (.sentinel client Protocol/SENTINEL_RESET pattern)))
 
-(defn sentinel-slaves* [client master-name]
+(defr sentinel-slaves [master-name]
   (with-chan client
              (fn []
                (.sentinel client Protocol/SENTINEL_SLAVES master-name)
                (map (fn [o] (.build BuilderFactory/STRING_MAP o)) (.getObjectMultiBulkReply client)))))
-(def ^:dynamic sentinel-slaves sentinel-slaves*)
 
-(defn dump* [client key] (->bytes client (.dump client key)))
-(def ^:dynamic dump dump*)
-
-(defn restore* [client key ttl serialized-value] (->status client (.restore client key ttl serialized-value)))
-(def ^:dynamic restore restore*)
-
-(defn pexpire* [client key millis] (->int client (.pexpire client key millis)))
-(def ^:dynamic pexpire pexpire*)
-
-(defn pexpire-at* [client key milli-ts] (->int client (.pexpireAt client key milli-ts)))
-(def ^:dynamic pexpire-at pexpire-at*)
-
-(defn pttl* [client key] (->int client (.pttl client key)))
-(def ^:dynamic pttl pttl*)
-
-(defn incr-by-float* [client key inc] (->double client (.incrByFloat client key inc)))
-(def ^:dynamic incr-by-float incr-by-float*)
-
-(defn psetex* [client key millis val] (->status client (.psetex client key millis val)))
-(def ^:dynamic psetex psetex*)
+(defr dump [key] (->bytes client (.dump client key)))
+(defr restore! [key ttl serialized-value] (->status client (.restore client key ttl serialized-value)))
+(defr pexpire! [key millis] (->int client (.pexpire client key millis)))
+(defr pexpire-at! [key milli-ts] (->int client (.pexpireAt client key milli-ts)))
+(defr pttl [key] (->int client (.pttl client key)))
+(defr incr-by-float! [key inc] (->double client (.incrByFloat client key inc)))
+(defr psetex! [key millis val] (->status client (.psetex client key millis val)))
 
 
 ;; key , value (->status (.set key val))
 ;; key, val, nxx
 ;; key, value, nxx, expr, (long) time
 ;; key, value, nxx, expr, (int) time
-(defmulti set* (fn [client & args] [(count args) (nth args 4 false)]))
-(defmethod set* [2 false] [client key val] (->status client (.set client key val)))
-(defmethod set* [3 false] [client key val nxxx] (->status client (.set client key val nxxx)))
-(defmethod set* [4 :Long] [client key val expr time] (->status client (.set client key val expr #^Long time)))
-(defmethod set* [4 :Integer] [client key val expr time] (->status client (.set client key val expr #^Integer time)))
-(def ^:dynamic set set*)
+(defmulti set! (fn [& args] [(count args) (nth args 4 false)]))
+(defmethod-r set! [2 false] set-simple [key val] (->status client (.set client key val)))
+(defmethod-r set! [3 false] set-nxxx [key val nxxx] (->status client (.set client key val nxxx)))
+(defmethod-r set! [4 :Long] set-time-long [key val expr time] (->status client (.set client key val expr #^Long time)))
+(defmethod-r set! [4 :Integer] set-time-int [key val expr time] (->status client (.set client key val expr #^Integer time)))
 
-(defn client-kill* [client client-name] (->status client (.clientKill client client-name)))
-(def ^:dynamic client-kill client-kill*)
+(defr client-kill! [client-name] (->status client (.clientKill client client-name)))
+(defr client-setname! [name] (->status client (.clientSetname client name)))
+(defr migrate! [host port key dest-db timeout] (->status client (.migrate host port key dest-db timeout)))
+(defr hincr-by-float! [key field inc] (->double client (.hincrByFloat client key field inc)))
 
-(defn client-setname* [client name] (->status client (.clientSetname client name)))
-(def ^:dynamic client-setname client-setname*)
-
-(defn migrate* [client host port key dest-db timeout] (->status client (.migrate host port key dest-db timeout)))
-(def ^:dynamic migrate migrate*)
-
-(defn hincr-by-float* [client key field inc] (->double client (.hincrByFloat client key field inc)))
-(def ^:dynamic hincr-by-float hincr-by-float*)
-
-
-(defn subscribe* [client jedis-pub-sub & channels]
+;; note: deliberately not doing special connection handling, as pubsub is special
+(defn subscribe [client jedis-pub-sub & channels]
   (with-chan client
              (fn []
                (.setTimeoutInfinite client)
                (.proceed jedis-pub-sub client channels)
                (.rollbackTimeout client))))
-(def ^:dynamic subscribe subscribe*)
 
-(defn publish* [client channel message] (->int client (.publish client channel message)))
-(def ^:dynamic publish publish*)
+(defn publish [client channel message] (->int client (.publish client channel message)))
 
-
-(defn psubscribe* [client jedis-pub-sub & patterns]
+(defn psubscribe [client jedis-pub-sub & patterns]
   (with-chan client
              #(non-multi client
                          (.setTimeoutInfinite client)
                          (.proceedWithPatterns jedis-pub-sub client patterns)
                          (.rollbackTimeout client))))
-(def ^:dynamic psubscribe psubscribe*)
 
 (defmacro just [statement] `(<!! ~statement))
 
 
-(defmacro redis> [& body]
-  `(let [client# (borrow)]
-     (with client#
-           ~@body)))
-
-
-(defmacro with [client & body]
-  `(let [client# ~client]
-     (binding [disconnect #(disconnect* client#)
-               select #(select* client# %)
-               db #(db* client#)
-               get #(get* client# %)
-               set #(set* client# %1 %2)
-               exists #(exists* client# %)
-               del (fn [& args#] (apply del* (cons client# args#)))
-               type #(type* client# %)
-               keys #(keys* client# %)
-               random-key #(random-key* client#)
-               rename #(rename* client# %1 %2)
-               renamenx #(renamenx* client# %1 %2)
-               expire-at #(expire-at* client# %1 %2)
-               ttl #(ttl* client# %)
-               move #(move* client# %1 %2)
-               getset #(getset* client# %1 %2)
-               mget (fn [& args#] (apply mget* (cons client# args#)))
-               setnx #(setnx* client# %1 %2)
-               setex #(setex* client# %1 %2 %3)
-               mset (fn [& args#] (apply mset* (cons client# args#)))
-               msetnx (fn [& args#] (apply msetnx* (cons client# args#)))
-               decr-by #(decr-by* client# %1 %2)
-               decr #(decr* client# %)
-               incr-by #(incr-by* client# %1 %2)
-               incr #(incr* client# %)
-               append #(append* client# %1 %2)
-               substr #(substr* client# %1 %2 %3)
-               hset #(hset* client# %1 %2 %3)
-               hget #(hget* client# %1 %2)
-               hsetnx #(hsetnx* client# %1 %2 %3)
-               hmset #(hmset* client# %1 %2)
-               hmget (fn [& args#] (apply hmget* (cons client# args#)))
-               hincr-by #(hincr-by* client# %1 %2 %3)
-               hexists #(hexists* client# %1 %2)
-               hdel (fn [& args#] (apply hdel* (cons client# args#)))
-               hlen #(hlen* client# %)
-               hkeys #(hkeys* client# %)
-               hvals #(hvals* client# %)
-               hgetall #(hgetall* client# %)
-               rpush (fn [& args#] (apply rpush* (cons (client# args#))))
-               lpush (fn [& args#] (apply lpush* (cons (client# args#))))
-               llen #(llen* client# %)
-               lrange #(lrange* client# %1 %2 %3)
-               ltrim #(ltrim* client# %1 %2 %3)
-               lindex #(lindex* client# %1 %2)
-               lset #(lset* client# %1 %2 %3)
-               lrem #(lrem* client# %1 %2 %3)
-               lpop #(lpop* client# %)
-               rpop #(rpop* client# %)
-               rpoplpush #(rpoplpush* client# %1 %2)
-               sadd (fn [& args#] (apply sadd* (cons client# args#)))
-               smembers #(smembers* client# %)
-               srem (fn [& args#] (apply srem* (cons client# args#)))
-               spop #(spop* client# %)
-               smove #(smove* client# %1 %2 %3)
-               scard #(scard* client# %)
-               sismember #(sismember* client# %1 %2)
-               sinter (fn [& args#] (apply sinter* (cons client# args#)))
-               sinterstore (fn [& args#] (apply sinterstore* (cons client# args#)))
-               sunion (fn [& args#] (apply sunion* (cons client# args#)))
-               sunionstore (fn [& args#] (apply sunionstore* (cons client# args#)))
-               sdiff (fn [& args#] (apply sdiff* (cons client# args#)))
-               sdiffstore (fn [& args#] (apply sdiffstore* (cons client# args#)))
-               srandmember (fn [& args#] (apply srandmember* (cons client# args#)))
-               zadd (fn [& args#] (apply zadd* (cons client# args#)))
-               zrange #(zrange* client# %1 %2 %3)
-               zrem (fn [& args#] (apply zrem* (cons client# args#)))
-               zincr-by #(zincr-by* client# %1 %2 %3)
-               zrank #(zrank* client# %1 %2)
-               zrevrank #(zrevrank* client# %1 %2)
-               zrevrange #(zrevrange* client# %1 %2 %3)
-               zrange-with-scores #(zrange-with-scores* client# %1 %2 %3)
-               zrevrange-with-scores #(zrevrange-with-scores* client# %1 %2 %3)
-               zcard #(zcard* client# %)
-               zscore #(zscore* client# %1 %2)
-               watch (fn [& args#] (apply watch* (cons client# args#)))
-               sort (fn [& args#] (apply sort* (cons client# args#)))
-               blpop (fn [& args#] (apply blpop* (cons client# args#)))
-               brpop (fn [& args#] (apply brpop* (cons client# args#)))
-               zcount (fn [& args#] (apply zcount* (cons client# args#)))
-               zrange-by-score (fn [& args#] (apply zrange-by-score* (cons client# args#)))
-               zrange-by-score-with-scores (fn [& args#] (apply zrange-by-score-with-scores* (cons client# args#)))
-               zrevrange-by-score (fn [& args#] (apply zrevrange-by-score* (cons client# args#)))
-               zrevrange-by-score-with-scores (fn [& args#] (apply zrevrange-by-score-with-scores* (cons client# args#)))
-               zremrange-by-rank #(zremrange-by-rank* client# %1 %2 %3)
-               zremrange-by-score (fn [& args#] (apply zremrange-by-score* (cons client# args#)))
-               zunionstore (fn [& args#] (apply zunionstore* (cons client# args#)))
-               zinterstore (fn [& args#] (apply zinterstore* (cons client# args#)))
-               strlen #(strlen client# %)
-               lpushx (fn [& args#] (apply lpushx* (cons client# args#)))
-               persist #(persist* client# %)
-               rpushx (fn [& args#] (apply rpushx* (cons client# args#)))
-               echo #(echo client# %)
-               linsert #(linsert* client# %1 %2 %3 %4)
-               brpoplpush #(brpoplpush* client# %1 %2 %3)
-               setbit (fn [& args#] (apply setbit* (cons client# args#)))
-               getbit #(getbit* client# %1 %2)
-               setrange #(setrange* client# %1 %2 %3)
-               getrange #(getrange* client# %1 %2 %3)
-               config-get #(config-get* client# %)
-               config-set #(config-set* client# %1 %2)
-               eval-params #(eval-params* client# %1 %2)
-               eval (fn [& args#] (apply eval* (cons client# args#)))
-               evalsha (fn [& args#] (apply evalsha* (cons client# args#)))
-               scripts-exist? (fn [& args#] (apply scripts-exist?* (cons client# args#)))
-               script-exists? (fn [& args#] (apply script-exists?* (cons client# args#)))
-               script-load #(script-load* client# %)
-               slowlog-get (fn [& args#] (apply slowlog-get* (cons client# args#)))
-               object-refcount #(object-refcount* client# %)
-               object-encoding #(object-encoding* client# %)
-               object-idletime #(object-idletime* client# %)
-               bitcount #(bitcount client# %1 %2 %3)
-               bitop (fn [& args#] (apply bitop* (cons client# args#)))
-               sentinel-masters #(sentinel-masters* client#)
-               sentinel-get-master-addr-by-name #(sentinel-get-master-addr-by-name* client# %)
-               sentinel-reset #(sentinel-reset* client# %)
-               sentinel-slaves #(sentinel-slaves* client# %)
-               dump #(dump* client# %)
-               restore #(restore* client# %1 %2 %3)
-               pexpire #(pexpire* client# %1 %2)
-               pexpire-at #(pexpire-at* client# %1 %2)
-               pttl #(pttl* client# %1)
-               incr-by-float #(incr-by-float* client# %1 %2)
-               psetex #(psetex* client# %1 %2 %3)
-               set (fn [& args#] (apply set* (cons client# args#)))
-               client-kill #(client-kill* client# %1)
-               client-setname #(client-setname* client# %1)
-               migrate #(migrate* client# %1 %2 %3 %4 %5)
-               hincr-by-float #(hincr-by-float* client# %1 %2 %3)
-               subscribe (fn [& args#] (apply subscribe* (cons client# args#)))
-               publish #(publish* client# %1 %2)
-               psubscribe (fn [& args#] (apply psubscribe* (cons client# args#)))
-               flush-db #(flush-db* client#)
-               ]
-       ~@body)))

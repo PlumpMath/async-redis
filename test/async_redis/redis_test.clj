@@ -1,72 +1,72 @@
 (ns async-redis.redis-test
-  (:refer-clojure :rename {sort core-sort}
-                  :exclude [get type keys set eval])
   (:import (clojure.core.async.impl.channels ManyToManyChannel))
   (:require [clojure.test :refer :all]
             [clojure.core.async :as async :refer [<!!]]
-            [async-redis.redis :refer :all]))
+            [async-redis.redis :as r]))
+
+(r/configure)
+(r/just (r/select! 9))
 
 (deftest test-wrap
   (testing "wrapping nil doesn't return nil"
-           (is (= false (wrap nil))))
+           (is (= false (r/wrap nil))))
   (testing "wrapping non-nil is identity"
-           (is (= true (wrap true))))
+           (is (= true (r/wrap true))))
   (testing "wrapping less obvious non-nil is also identity"
-           (is (= 77 (wrap 77)))))
+           (is (= 77 (r/wrap 77)))))
 
 (deftest test-with-chan
   (testing "with-chan returns a channel"
-           (is (instance? ManyToManyChannel (with-chan nil (fn [] 7)))))
+           (is (instance? ManyToManyChannel (r/with-chan nil (fn [] 7)))))
   (testing "simple with-chan"
-           (is (= 8 (<!! (with-chan nil (fn [] 8)))))))
+           (is (= 8 (<!! (r/with-chan nil (fn [] 8)))))))
 
 (defn random-string [length]
   (apply str (take length (repeatedly #(rand-nth "abcdefghijklmnopqrstuvwxyz")))))
 
 (deftest the-basics
-  (with (connect)
-        (let [key "watevah"
-              val (random-string 20)]
+  (r/just (r/flush-db!))
 
-          (just (select 9))
+  (let [key "watevah"
+        val (random-string 20)]
 
-          (testing "control for exists" (is (= false (<!! (exists val)))))
+    (testing "control for exists" (is (= false (<!! (r/exists? val)))))
 
-          (testing "control that our key isn't used yet"
-                   (if (<!! (exists key)) (just (del key)))
+    (testing "control that our key isn't used yet"
+             (if (<!! (r/exists? key)) (r/just (r/del! key)))
 
-                   (is (= false (<!! (exists key)))))
+             (is (= false (<!! (r/exists? key)))))
 
-          (just (set key val))
-          (testing "double-check exists" (is (= true (<!! (exists key)))))
-          (testing "set round-trip" (is (= val (<!! (get key)))))
-          (testing "type is as expected" (is (= "string" (<!! (type key)))))
+    (r/just (r/set! key val))
+    (testing "double-check exists" (is (= true (<!! (r/exists? key)))))
+    (testing "set round-trip" (is (= val (<!! (r/get key)))))
+    (testing "type is as expected" (is (= "string" (<!! (r/type key)))))
 
-          (testing "deletion"
-                   (just (del key))
-                   (is (= false (<!! (exists val)))))
-          )))
+    (testing "deletion"
+             (r/just (r/del! key))
+             (is (= false (<!! (r/exists? val)))))
+    ))
 
 (deftest the-keys
-  (with (connect)
-        (just (select 9))
-        (just (flush-db))
-        (testing "no keys after flush, control" (is (= '() (<!! (keys "*")))))
+  (r/just (r/flush-db!))
 
-        (just (set "a-key" "abc"))
-        (testing "now we have one key" (is (= '("a-key") (<!! (keys "*")))))
-        (testing "random-key should give me that one" (is (= "a-key" (<!! (random-key)))))
+  (testing "no keys after flush, control" (is (= '() (<!! (r/keys "*")))))
 
-        (just (rename "a-key" "another-key"))
-        (testing "renamed it" (is (= "another-key" (<!! (random-key)))))
-        (testing "and the original is gone" (is (= '("another-key") (<!! (keys "*")))))
-        (testing "value has swapped properly too" (is (= "abc" (<!! (get "another-key")))))
+  (r/just (r/set! "a-key" "abc"))
+  (testing "now we have one key" (is (= '("a-key") (<!! (r/keys "*")))))
+  (testing "random-key should give me that one" (is (= "a-key" (<!! (r/random-key)))))
 
-        (just (set "a-key" "def"))
-        (testing "now I have both" (is (= (core-sort '("another-key" "a-key"))
-                                          (core-sort (<!! (keys "*"))))))
-        (testing "paranoia" (is (= "def" (<!! (get "a-key")))))
+  (r/just (r/rename! "a-key" "another-key"))
+  (testing "renamed it" (is (= "another-key" (<!! (r/random-key)))))
+  (testing "and the original is gone" (is (= '("another-key") (<!! (r/keys "*")))))
+  (testing "value has swapped properly too" (is (= "abc" (<!! (r/get "another-key")))))
 
-        (testing "returns 0" (is (= 0 (<!! (renamenx "a-key" "another-key")))))
-        (testing "the rename should have failed" (is (= "abc" (<!! (get "another-key")))))
-        ))
+  (r/just (r/set! "a-key" "def"))
+  (testing "now I have both" (is (= (sort '("another-key" "a-key"))
+                                    (sort (<!! (r/keys "*"))))))
+  (testing "paranoia" (is (= "def" (<!! (r/get "a-key")))))
+
+  (testing "returns 0" (is (= 0 (<!! (r/renamenx! "a-key" "another-key")))))
+  (testing "the rename should have failed" (is (= "abc" (<!! (r/get "another-key")))))
+  )
+
