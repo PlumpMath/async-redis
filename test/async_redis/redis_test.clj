@@ -4,8 +4,9 @@
             [clojure.core.async :as async :refer [<!!]]
             [async-redis.redis :as r]))
 
-(r/configure)
-(r/just (r/select! 9))
+(println "configure")
+(r/configure "127.0.0.1" 6379 :db 9)
+(println "run")
 
 (deftest test-wrap
   (testing "wrapping nil doesn't return nil"
@@ -25,6 +26,7 @@
   (apply str (take length (repeatedly #(rand-nth "abcdefghijklmnopqrstuvwxyz")))))
 
 (deftest the-basics
+  (println "basics")
   (r/just (r/flush-db!))
 
   (let [key "watevah"
@@ -48,6 +50,12 @@
     ))
 
 (deftest the-keys
+  (println "keys")
+  (println "getting db...")
+  (let [x (r/db)]
+    (println (str "x: " x)))
+  (testing "selected the right DB" (is (= 9 (<!! (r/db)))))
+  (println "flushing")
   (r/just (r/flush-db!))
 
   (testing "no keys after flush, control" (is (= '() (<!! (r/keys "*")))))

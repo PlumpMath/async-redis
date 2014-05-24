@@ -11,15 +11,24 @@
 
 (def ^{:private true} local-host "127.0.0.1")
 (def ^{:private true} default-port 6379)
+(def ^{:private true} default-db 1)
 
 (def ^{:private true} *host (ref local-host))
 (def ^{:private true} *port (ref default-port))
+(def ^{:private true} *db (ref default-db))
 (def ^{:private true} *pool (ref (chan)))
 
+(defn ^{:private true} ensure-db-selected [conn]
+  (let [db (deref *db)]
+    (when (not (= (.getDB conn) db))
+      (.select conn db)
+      (.getBinaryBulkReply conn)))
+  conn)
+
 (defn connect []
-     (let [client (Client. (deref *host) (deref *port))]
-       (.connect client)
-       client))
+  (let [conn (Client. (deref *host) (deref *port))]
+    (.connect conn)
+    (ensure-db-selected conn)))
 
 (defn fill-client-channel [channel num-connections]
   (go-loop [n num-connections]
@@ -28,14 +37,15 @@
              (recur (- n 1)))))
 
 (defn configure
-  ([] (fill-client-channel (deref *pool) 1))
-  ([host port]
+  ([] (fill-client-channel (deref *pool) 5))
+  ([host port &{:keys [db] :or {db default-db}}]
      (dosync (ref-set *host host)
              (ref-set *port port)
-             (ref-set *pool (chan))
+             (ref-set *db db)
+             (ref-set *pool (chan 10))
              (fill-client-channel (deref *pool) 5))))
 
-(defn <conn [] (<!! (deref *pool)))
+(defn <conn [] (ensure-db-selected (<!! (deref *pool))))
 (defn >conn [conn] (>!! (deref *pool) conn))
 
 (defmacro w-client
@@ -241,7 +251,12 @@
 
 (defr select! [db] (->status client (.select client db)))
 
-(defr db [] (.getDB client))
+(defr db []
+  (let [result-chan (chan 1)
+        db (.getDB client)]
+    (>!! result-chan db)
+    result-chan))
+
 (defr flush-db! [] (->status client (.flushDB client)))
 
 (defr exists? [key] (->boolean client (.exists client key)))
