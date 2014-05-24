@@ -132,3 +132,11 @@
     (testing "mget" (is (= (list val1 val2 val3) (<!! (r/mget key1 key2 key3)))))
     )
   )
+
+(deftest concurrent-gets-dont-clobber
+  (let [keys (take 20 (repeatedly #(random-string 20))),
+        values (take 20 (repeatedly #(random-string 20)))]
+    (map (fn [k v]
+           (r/just (r/set! k v))
+           (testing "I get back my value" (is (= val (<!! (r/get k))))))
+         keys values)))
