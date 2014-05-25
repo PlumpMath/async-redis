@@ -289,7 +289,9 @@
         val (random-string 10)]
     (testing "sadd"
              (r/just (r/sadd! key val))
-             (is (= 1 (<!! (r/scard key)))))
+             (is (= 1 (<!! (r/scard key))))
+             (is (= #{val} (<!! (r/smembers key))))
+             )
     )
   )
 
