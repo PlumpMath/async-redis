@@ -460,9 +460,12 @@
 
 (defr zremrange-by-rank [key start end] (->int client (.zremrangeByRank client key start end)))
 
-(def x&y 2)
-
 (defmulti zremrange-by-score (fn [key start end] (map class [key start end])))
+(defmethod-r zremrange-by-score
+  [String Long Long]
+  zremrange-by-score-ints
+  [key start end]
+  (zremrange-by-score key (double start) (double end)))
 (defmethod-r zremrange-by-score
   [String Double Double]
   zremrange-by-score-doubles
