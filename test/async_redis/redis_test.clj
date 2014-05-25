@@ -342,8 +342,20 @@
              (r/just (r/zadd! key 1.0 val1))
              (r/just (r/zadd! key 2.0 val2))
              (is (= 2 (<!! (r/zcard key))))
-             (is (= #{val1} (<!! (r/zrange key 0 0)))))
+             (is (= #{val1} (<!! (r/zrange key 0 0))))
              (is (= #{val1 val2} (<!! (r/zrange key 0 1))))
+             (is (= 0 (<!! (r/zrank key val1))))
+             (is (= 1 (<!! (r/zrank key val2))))
+             (is (= 1.0 (<!! (r/zscore key val1))))
+             (is (= 2.0 (<!! (r/zscore key val2))))
+             )
+
+    (testing "zrem"
+             (is (= #{val1 val2} (<!! (r/zrange key 0 -1))))
+             (r/just (r/zrem! key val1))
+             (is (= 1 (<!! (r/zcard key))))
+             (is (= #{val2} (<!! (r/zrange key 0 -1))))
+             )
     )
   )
 

@@ -358,7 +358,7 @@
   ([key map] (->int client (.zadd client key map))))
 
 (defr zrange [key start end] (->list>lset client (.zrange client key start end)))
-(defr zrem! [key & members] (->int client (.zrem client key members)))
+(defr zrem! [key & members] (->int client (.zrem client key (into-array String members))))
 (defr zincr-by! [key score member] (->double client (.zincrby client key score member)))
 (defr zrank [key member] (->int client (.zrank client key member)))
 (defr zrevrank [key member] (->int client (.zrevrank client key member)))
@@ -367,7 +367,7 @@
 (defr zrevrange-with-scores [key start end] (->tupled-set client (.zrevrangeWithScores client key start end)))
 (defr zcard [key] (->int client (.zcard client key)))
 (defr zscore [key member] (->double client (.zscore client key member)))
-(defr watch [& keys] (->status-multi client (.watch client keys)))
+(defr watch [& keys] (->status-multi client (.watch client (into-array String keys))))
 
 (defr sort [key] (->list client (.sort client key)))
 (defr sort-with-params [key sort-params](->list client (.sort client key #^SortParams sort-params)))
