@@ -140,6 +140,14 @@
                             ~@body
                             (wrap (.getBulkReply client#))))))
 
+(defmacro ->string>int [client & body]
+  `(let [client# ~client]
+     (with-chan client#
+                #(non-multi client#
+                            ~@body
+                            (let [ret# (.getBulkReply client#)]
+                              (if ret# (Integer/valueOf ret#) 0))))))
+
 (defmacro ->double [client & body]
   `(let [client# ~client]
      (with-chan client#
@@ -274,6 +282,7 @@
 (defr renamenx! [old-key new-key] (->int client (.renamenx client old-key new-key)))
 
 (defr get [key] (->string client (.get client key)))
+(defr get-int [key] (->string>int client (.get client key)))
 (defr expire! [key seconds] (->int client (.expire client key seconds)))
 (defr expire-at! [key timestamp] (->int client (.expireAt client key timestamp)))
 (defr ttl [key] (->int client (.ttl client key)))
@@ -293,7 +302,8 @@
 (defr decr-by! [key inc] (->int client (.decrBy client key inc)))
 (defr decr! [key] (->int client (.decr client key)))
 (defr incr-by! [key inc] (->int client (.incrBy client key inc)))
-(defr incr! [client key] (->int client (.incr client key)))
+(defr incr! [key] (->int client (.incr client key)))
+
 (defr append! [key value] (->int client (.append client key value)))
 (defr substr [key start end] (->string client (.substr client key start end)))
 

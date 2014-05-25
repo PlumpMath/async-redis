@@ -151,6 +151,46 @@
     (testing "msetnx did not set them all afterward" (is (= vals (<!! (apply r/mget keys)))))
     ))
 
+(deftest numbers
+  (let [key (random-string 20)]
+    (r/just (r/set! key "1"))
+    (testing "control" (is (= "1" (<!! (r/get key)))))
+
+    (testing "base incr" (is (= 2 (<!! (r/incr! key)))))
+    (testing "base incr 2" (is (= 3 (<!! (r/incr! key)))))
+    (testing "base incr doublecheck" (is (= "3" (<!! (r/get key)))))
+
+    (testing "incr-by" (is (= 5 (<!! (r/incr-by! key 2)))))
+    (testing "incr-by doublecheck" (is (= "5" (<!! (r/get key)))))
+    (testing "incr-by doublecheck 2" (is (= 5 (<!! (r/get-int key)))))
+
+    (testing "decr" (is (= 4 (<!! (r/decr! key)))))
+    (testing "decr-by" (is (= 1 (<!! (r/decr-by! key 3)))))
+    (testing "doublecheck" (is (= 1 (<!! (r/get-int key)))))
+    )
+  )
+
+(deftest strings
+  (let [key (random-string 20)
+        value1 (random-string 10)
+        value2 (random-string 10)]
+    (r/just (r/set! key value1))
+    (testing "control" (is (= value1 (<!! (r/get key)))))
+    (r/just (r/append! key value2))
+    (testing "appended" (is (= (str value1 value2) (<!! (r/get key)))))
+    (testing "substr start" (is (= value1 (<!! (r/substr key 0 (- (count value1) 1))))))
+    (testing "substr end" (is (= value2 (<!! (r/substr key (count value1) (+ (count value1) (count value2)))))))
+    ))
+
+(deftest hashes
+  (let [key (random-string 20)
+        hkey (random-string 10)
+        hval (random-string 10)]
+    (r/just (r/hset! key hkey hval))
+    (testing "hset/get" (is (= hval (<!! (r/hget key hkey)))))
+    )
+  )
+
 (deftest concurrent-gets-dont-clobber
   (let [keys (take 100 (repeatedly #(random-string 20))),
         values (take 100 (repeatedly #(random-string 20)))]
