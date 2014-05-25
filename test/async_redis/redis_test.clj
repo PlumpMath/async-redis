@@ -331,6 +331,17 @@
     )
   )
 
+(deftest sorting
+  (let [key (random-string 20)
+        vals ["1" "2" "3"]]
+    (testing "sort"
+             (r/just (apply (partial r/lpush! key) vals))
+             (is (= (reverse vals) (<!! (r/lrange key 0 3))))
+             (is (= vals (<!! (r/sort key))))
+             )
+    )
+  )
+
 (deftest sets
   (let [key (random-string 20)
         key1 (random-string 20)
