@@ -285,6 +285,7 @@
 (defr get-int [key] (->string>int client (.get client key)))
 (defr expire! [key seconds] (->int client (.expire client key seconds)))
 (defr expire-at! [key timestamp] (->int client (.expireAt client key timestamp)))
+(defr persist! [key] (->int client (.persist client key)))
 (defr ttl [key] (->int client (.ttl client key)))
 (defr setex! [key seconds value] (->status client (.setex client key seconds value)))
 
@@ -339,6 +340,7 @@
 (defr rpop! [key] (->string client (.rpop client key)))
 (defr rpoplpush! [src-key dest-key] (->string client (.rpoplpush client src-key dest-key)))
 (defr lpushx! [key & strings] (->int client (.lpushx client key (into-array String strings))))
+(defr rpushx! [key & strings] (->int client (.rpushx client key (into-array String strings))))
 
 (defr sadd! [key & members] (->int client (.sadd client key (into-array String members))))
 (defr smembers [key] (->list>set client (.smembers client key)))
@@ -503,8 +505,6 @@
   [dest-key params & keys]
   (->int client (.zinterstore client dest-key params (into-array String keys))))
 
-(defr persist! [key] (->int client (.persist client key)))
-(defr rpushx! [key & strings] (->int (.rpushx client key strings)))
 (defr echo [string] (->string (.echo client string)))
 (defr linsert! [key where pivot value] (->int (.linsert client key where pivot value)))
 (defr brpoplpush! [source dest timeout] (->blocking:string client (.brpoplpush client source dest timeout)))

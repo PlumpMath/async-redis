@@ -262,7 +262,22 @@
     (testing "lpushx"
              (r/just (r/del! key))
              (r/just (r/lpushx! key val1))
-             (is (= 0 (<!! (r/llen key)))))
+             (is (= 0 (<!! (r/llen key))))
+             (r/just (r/lpush! key val1))
+             (is (= 1 (<!! (r/llen key))))
+             (r/just (r/lpushx! key val2))
+             (is (= 2 (<!! (r/llen key))))
+             )
+
+    (testing "rpushx"
+             (r/just (r/del! key))
+             (r/just (r/rpushx! key val1))
+             (is (= 0 (<!! (r/llen key))))
+             (r/just (r/rpush! key val1))
+             (is (= 1 (<!! (r/llen key))))
+             (r/just (r/rpushx! key val2))
+             (is (= 2 (<!! (r/llen key))))
+             )
 
     (testing "ltrim"
              (r/just (r/del! key))
