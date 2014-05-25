@@ -251,7 +251,15 @@
              (is (= val1 (<!! (r/lindex key 1))))
              (is (= [val2 val1] (<!! (r/lrange key 0 -1)))))
 
+    (testing "lpushx"
+             (r/just (r/del! key))
+             (r/just (r/lpushx! key val1))
+             (is (= 0 (<!! (r/llen key)))))
+
     (testing "ltrim"
+             (r/just (r/del! key))
+             (r/just (r/lpush! key val1 val2))
+             (is (= 2 (<!! (r/llen key))))
              (r/just (r/ltrim! key 0 0))
              (is (= 1 (<!! (r/llen key)))))
 
