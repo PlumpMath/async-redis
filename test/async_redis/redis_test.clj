@@ -333,6 +333,20 @@
     )
   )
 
+(deftest heaps
+  (let [key (random-string 20)
+        val1 (random-string 10)
+        val2 (random-string 10)]
+
+    (testing "zadd"
+             (r/just (r/zadd! key 1.0 val1))
+             (r/just (r/zadd! key 2.0 val2))
+             (is (= 2 (<!! (r/zcard key))))
+             (is (= #{val1} (<!! (r/zrange key 0 0)))))
+             (is (= #{val1 val2} (<!! (r/zrange key 0 1))))
+    )
+  )
+
 (deftest concurrent-gets-dont-clobber
   (let [keys (take 100 (repeatedly #(random-string 20))),
         values (take 100 (repeatedly #(random-string 20)))]
