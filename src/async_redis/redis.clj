@@ -324,10 +324,10 @@
 (defr hvals [key] (->list client (.hvals client key)))
 (defr hgetall [key] (->map client (.hgetAll client key)))
 
-(defr rpush! [key & strings] (->int client (.rpush client key strings)))
-(defr lpush! [key & strings] (->int client (.lpush client key strings)))
+(defr rpush! [key & strings] (->int client (.rpush client key (into-array String strings))))
+(defr lpush! [key & strings] (->int client (.lpush client key (into-array String strings))))
 (defr llen [key] (->int client (.llen client key)))
-(defr lrange [client key start end] (->list client (.lrange client key start end)))
+(defr lrange [key start end] (->list client (.lrange client key start end)))
 (defr ltrim! [key start end] (->status client (.ltrim client key start end)))
 (defr lindex [key index] (->string client (.lindex client key index)))
 (defr lset! [key index value] (->status client (.lset client key index value)))

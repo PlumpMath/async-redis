@@ -202,31 +202,61 @@
         hash {"a" "foo"
               "b" "bing"
               "c" "bang"}]
-    (r/just (r/hmset! key hash))
-    (testing "hmset a" (is (= (get hash "a") (<!! (r/hget key "a")))))
-    (testing "hmset b" (is (= (get hash "b") (<!! (r/hget key "b")))))
-    (testing "hmset c" (is (= (get hash "c") (<!! (r/hget key "c")))))
-    (testing "hgetall" (is (= hash (<!! (r/hgetall key)))))
-    (testing "hkeys" (is (= (sort (seq (keys hash))) (sort (seq (<!! (r/hkeys key)))))))
-    (testing "hvals" (is (= (sort (seq (vals hash))) (sort (seq (<!! (r/hvals key)))))))
-    (testing "hmget" (is (= (list "bing" "foo") (sort (seq (<!! (r/hmget key "a" "b")))))))
 
-    (testing "hexists 1" (is (= true (<!! (r/hexists? key "a")))))
-    (testing "hlen 1" (is (= 3 (<!! (r/hlen key)))))
+    (testing "hmset and lots of getters"
+             (r/just (r/hmset! key hash))
+             (is (= true (<!! (r/hexists? key "a"))))
+             (is (= (get hash "a") (<!! (r/hget key "a"))))
+             (is (= (get hash "b") (<!! (r/hget key "b"))))
+             (is (= (get hash "c") (<!! (r/hget key "c"))))
+             (is (= hash (<!! (r/hgetall key))))
+             (is (= (sort (seq (keys hash))) (sort (seq (<!! (r/hkeys key))))))
+             (is (= (sort (seq (vals hash))) (sort (seq (<!! (r/hvals key))))))
+             (is (= (list "bing" "foo") (sort (seq (<!! (r/hmget key "a" "b"))))))
+             (is (= 3 (<!! (r/hlen key)))))
 
-    (r/just (r/hdel! key "a"))
-    (testing "hexists 2" (is (= false (<!! (r/hexists? key "a")))))
-    (testing "hexists 3" (is (= true (<!! (r/hexists? key "b")))))
-    (testing "hdel" (is (= {"b" "bing" "c" "bang"} (<!! (r/hgetall key)))))
-    (testing "hlen 2" (is (= 2 (<!! (r/hlen key)))))
+    (testing "hdel"
+             (r/just (r/hdel! key "a"))
+             (is (= false (<!! (r/hexists? key "a"))))
+             (is (= true (<!! (r/hexists? key "b"))))
+             (is (= {"b" "bing" "c" "bang"} (<!! (r/hgetall key))))
+             (is (= 2 (<!! (r/hlen key)))))
     )
 
   (let [key (random-string 20)
         hkey (random-string 10)]
     (r/just (r/hset! key hkey "1"))
-    (testing "hincr-by" (is (= 2 (<!! (r/hincr-by! key hkey 1)))))
+    (testing "hincr-by 1" (is (= 2 (<!! (r/hincr-by! key hkey 1)))))
     (testing "hincr-by 2" (is (= 4 (<!! (r/hincr-by! key hkey 2)))))
     (testing "just checking" (is (= 4 (<!! (r/hget-int key hkey)))))
+    )
+  )
+
+(deftest lists
+  (let [key (random-string 20)
+        val1 (random-string 20)
+        val2 (random-string 20)
+        val3 (random-string 20)]
+
+    (testing "rpush"
+             (r/just (r/rpush! key val1))
+             (is (= val1 (<!! (r/lindex key 0))))
+             (is (= [val1] (<!! (r/lrange key 0 -1)))))
+
+    (testing "lpush"
+             (r/just (r/lpush! key val2))
+             (is (= 2 (<!! (r/llen key))))
+             (is (= val2 (<!! (r/lindex key 0))))
+             (is (= val1 (<!! (r/lindex key 1))))
+             (is (= [val2 val1] (<!! (r/lrange key 0 -1)))))
+
+    (testing "ltrim"
+             (r/just (r/ltrim! key 0 0))
+             (is (= 1 (<!! (r/llen key)))))
+
+    (testing "lset"
+             (r/just (r/lset! key 0 val1))
+             (is (= val1 (<!! (r/lindex key 0)))))
     )
   )
 
