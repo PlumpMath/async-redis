@@ -338,7 +338,7 @@
         val1 (random-string 10)
         val2 (random-string 10)]
 
-    (testing "zadd"
+    (testing "basics"
              (r/just (r/zadd! key 1.0 val1))
              (r/just (r/zadd! key 2.0 val2))
              (is (= 2 (<!! (r/zcard key))))
@@ -346,15 +346,29 @@
              (is (= #{val1 val2} (<!! (r/zrange key 0 1))))
              (is (= 0 (<!! (r/zrank key val1))))
              (is (= 1 (<!! (r/zrank key val2))))
+             (is (= 1 (<!! (r/zrevrank key val1))))
+             (is (= 0 (<!! (r/zrevrank key val2))))
              (is (= 1.0 (<!! (r/zscore key val1))))
              (is (= 2.0 (<!! (r/zscore key val2))))
              )
 
+    (testing "ranges"
+             (r/just (r/del! key))
+             (r/just (r/zadd! key {1.0 val1 2.0 val2}))
+             (is (= #{val1 val2} (<!! (r/zrange key 0 -1))))
+             (is (= #{val1} (<!! (r/zrange key 0 0))))
+             (is (= #{val2} (<!! (r/zrevrange key 0 0))))
+             (is (= #{[val1 1.0]} (<!! (r/zrange-with-scores key 0 0))))
+             )
+
     (testing "zrem"
+             (r/just (r/del! key))
+             (r/just (r/zadd! key {1.0 val1 2.0 val2}))
              (is (= #{val1 val2} (<!! (r/zrange key 0 -1))))
              (r/just (r/zrem! key val1))
              (is (= 1 (<!! (r/zcard key))))
              (is (= #{val2} (<!! (r/zrange key 0 -1))))
+             (is (= 0 (<!! (r/zrank key val2))))
              )
     )
   )

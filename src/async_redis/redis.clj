@@ -256,8 +256,8 @@
                                   tuple-set# (LinkedHashSet.)]
                               (while (.hasNext iterator#)
                                      (let [key# (.next iterator#)
-                                           value# (.next iterator#)]
-                                     (.add tuple-set# (Tuple. key# value#))))
+                                           value# (Double/valueOf (.next iterator#))]
+                                     (.add tuple-set# [key# value#])))
                               tuple-set#)))))
 
 
