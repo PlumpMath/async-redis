@@ -2,12 +2,14 @@
   (:refer-clojure :exclude [get type keys set sort eval])
   (:import (java.net.URI)
            (java.util HashSet HashMap LinkedHashSet)
-           (redis.clients.jedis Client BinaryClient JedisPubSub BuilderFactory
+           (redis.clients.jedis Client BinaryClient BinaryClient$LIST_POSITION JedisPubSub BuilderFactory
                                 Tuple SortingParams Protocol JedisPool)
            (redis.clients.util SafeEncoder Slowlog)
            (redis.clients.jedis.exceptions JedisDataException))
   (:require [clojure.core.async :as async :refer [go >! <! <!! >!! chan go-loop]]))
 
+(def LIST_BEFORE BinaryClient$LIST_POSITION/BEFORE)
+(def LIST_AFTER BinaryClient$LIST_POSITION/AFTER)
 
 (def ^{:private true} local-host "127.0.0.1")
 (def ^{:private true} default-port 6379)
@@ -341,6 +343,7 @@
 (defr rpoplpush! [src-key dest-key] (->string client (.rpoplpush client src-key dest-key)))
 (defr lpushx! [key & strings] (->int client (.lpushx client key (into-array String strings))))
 (defr rpushx! [key & strings] (->int client (.rpushx client key (into-array String strings))))
+(defr linsert! [key where pivot value] (->int client (.linsert client key where pivot value)))
 
 (defr sadd! [key & members] (->int client (.sadd client key (into-array String members))))
 (defr smembers [key] (->list>set client (.smembers client key)))
@@ -506,7 +509,6 @@
   (->int client (.zinterstore client dest-key params (into-array String keys))))
 
 (defr echo [string] (->string client (.echo client string)))
-(defr linsert! [key where pivot value] (->int client (.linsert client key where pivot value)))
 (defr brpoplpush! [source dest timeout] (->blocking:string client (.brpoplpush client source dest timeout)))
 
 (defr watch [& keys] (->status-multi client (.watch client (into-array String keys))))

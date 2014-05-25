@@ -316,6 +316,18 @@
              (is (= 0 (<!! (r/llen key))))
              (is (= 1 (<!! (r/llen key2))))
              (is (= val1 (<!! (r/lindex key2 0)))))
+
+    (testing "linsert"
+             (r/just (r/del! key))
+             (r/just (r/lpush! key val1))
+             (is (= 2 (<!! (r/linsert! key r/LIST_BEFORE val1 val2))))
+             (is (= [val2 val1] (<!! (r/lrange key 0 1))))
+
+             (r/just (r/del! key))
+             (r/just (r/lpush! key val1))
+             (is (= 2 (<!! (r/linsert! key r/LIST_AFTER val1 val2))))
+             (is (= [val1 val2] (<!! (r/lrange key 0 1))))
+             )
     )
   )
 
