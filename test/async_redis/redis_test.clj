@@ -336,8 +336,13 @@
 
 (deftest heaps
   (let [key (random-string 20)
+        key2 (random-string 20)
         val1 (random-string 10)
-        val2 (random-string 10)]
+        val2 (random-string 10)
+        vals1 (take 10 (repeatedly #(random-string 10)))
+        scores1 (take 10 (repeatedly rand))
+        vals2 (take 10 (repeatedly #(random-string 10)))
+        scores2 (take 10 (repeatedly rand))]
 
     (testing "basics"
              (r/just (r/zadd! key 1.0 val1))
@@ -422,6 +427,13 @@
 
              (r/just (r/zremrange-by-score key 0 1))
              (is (= #{val2} (<!! (r/zrange key 0 -1))))
+             )
+
+    (testing "multi-heap operations"
+             (r/just (r/del! key))
+             (r/just (r/del! key2))
+             (r/just (r/zadd! key (zipmap scores1 vals1)))
+             (r/just (r/zadd! key2 (zipmap scores2 vals2)))
              )
     )
   )
