@@ -369,16 +369,16 @@
 (defr zcard [key] (->int client (.zcard client key)))
 (defr zscore [key member] (->double client (.zscore client key member)))
 
-(defmulti zcount (fn [key min max] [key min max]))
-(defmethod-r zcount [:String :Double :Double]
-  zcount-doubles [client key min max]
+(defmulti zcount (fn [key min max] (map class [key min max])))
+(defmethod-r zcount [String Double Double]
+  zcount-doubles [key min max]
   (->int client (.zcount client key #^Double min #^Double max)))
-(defmethod-r zcount [:String :String :String]
-  zcount-strings [client key min max]
+(defmethod-r zcount [String String String]
+  zcount-strings [key min max]
   (->int client (.zcount client key #^String min #^String max)))
 
-(defmulti zrange-by-score (fn [key min max & optional] [key min max]))
-(defmethod-r zrange-by-score [:String :Double :Double]
+(defmulti zrange-by-score (fn [key min max & optional] (map class [key min max])))
+(defmethod-r zrange-by-score [String Double Double]
   zrange-by-score-doubles
   [key min max & optional]
   (if (empty? optional)
@@ -386,7 +386,7 @@
     (let [offset (first optional)
           count (second optional)]
       (->list>lset client (.zrangeByScore client key #^Double min #^Double max offset count)))))
-(defmethod-r zrange-by-score [:String :String :String]
+(defmethod-r zrange-by-score [String String String]
   zrange-by-score-strings
   [key min max & optional]
   (if (empty? optional)

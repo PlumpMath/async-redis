@@ -357,6 +357,7 @@
              (r/just (r/del! key))
              (r/just (r/zadd! key {1.0 val1 2.0 val2}))
              (is (= #{val1 val2} (<!! (r/zrange key 0 -1))))
+
              (is (= #{val1} (<!! (r/zrange key 0 0))))
              (is (= #{val2} (<!! (r/zrevrange key 0 0))))
              (is (= #{[val1 1.0]} (<!! (r/zrange-with-scores key 0 0))))
@@ -371,6 +372,14 @@
              (is (= 1 (<!! (r/zcard key))))
              (is (= #{val2} (<!! (r/zrange key 0 -1))))
              (is (= 0 (<!! (r/zrank key val2))))
+             )
+
+    (testing "zcount"
+             (r/just (r/del! key))
+             (r/just (r/zadd! key {1.0 val1 2.0 val2}))
+             (is (= #{val1 val2} (<!! (r/zrange key 0 -1))))
+             (is (= 2 (<!! (r/zcount key 0.0 3.0))))
+             (is (= 2 (<!! (r/zcount key "0.0" "3.0"))))
              )
     )
   )
