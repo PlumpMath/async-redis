@@ -378,7 +378,8 @@
   (->int client (.zcount client key #^String min #^String max)))
 
 (defmulti zrange-by-score (fn [key min max & optional] (map class [key min max])))
-(defmethod-r zrange-by-score [String Double Double]
+(defmethod-r zrange-by-score
+  [String Double Double]
   zrange-by-score-doubles
   [key min max & optional]
   (if (empty? optional)
@@ -386,7 +387,9 @@
     (let [offset (first optional)
           count (second optional)]
       (->list>lset client (.zrangeByScore client key #^Double min #^Double max offset count)))))
-(defmethod-r zrange-by-score [String String String]
+
+(defmethod-r zrange-by-score
+  [String String String]
   zrange-by-score-strings
   [key min max & optional]
   (if (empty? optional)
@@ -394,26 +397,6 @@
     (let [offset (first optional)
           count (second optional)]
       (->list>lset client (.zrangeByScore client key #^String min #^String max offset count)))))
-
-(defmulti zrange-by-score-with-scores (fn [key min max & optional] (map class [key min max])))
-(defmethod-r zrange-by-score-with-scores
-  [String Double Double]
-  zrange-by-score-with-score-doubles
-  [key min max & optional]
-  (if (empty? optional)
-    (->tupled-set client (.zrangeByScoreWithScores client key #^Double min #^Double max))
-    (let [offset (first optional)
-          count (second optional)]
-      (->tupled-set client (.zrangeByScoreWithScores client key #^Double min #^Double max offset count)))))
-(defmethod-r zrange-by-score-with-scores
-  [String String String]
-  zrange-by-score-with-score-strings
-  [key min max & optional]
-  (if (empty? optional)
-    (->tupled-set client (.zrangeByScoreWithScores client key #^String min #^String max))
-    (let [offset (first optional)
-          count (second optional)]
-      (->tupled-set client (.zrangeByScoreWithScores client key #^String min #^String max offset count)))))
 
 (defmulti zrevrange-by-score (fn [key min max & optional] (map class [key min max])))
 (defmethod-r zrevrange-by-score
@@ -434,6 +417,26 @@
     (let [offset (first optional)
           count (second optional)]
       (->list>lset client (.zrevrangeByScore client key #^String min #^String max offset count)))))
+
+(defmulti zrange-by-score-with-scores (fn [key min max & optional] (map class [key min max])))
+(defmethod-r zrange-by-score-with-scores
+  [String Double Double]
+  zrange-by-score-with-score-doubles
+  [key min max & optional]
+  (if (empty? optional)
+    (->tupled-set client (.zrangeByScoreWithScores client key #^Double min #^Double max))
+    (let [offset (first optional)
+          count (second optional)]
+      (->tupled-set client (.zrangeByScoreWithScores client key #^Double min #^Double max offset count)))))
+(defmethod-r zrange-by-score-with-scores
+  [String String String]
+  zrange-by-score-with-score-strings
+  [key min max & optional]
+  (if (empty? optional)
+    (->tupled-set client (.zrangeByScoreWithScores client key #^String min #^String max))
+    (let [offset (first optional)
+          count (second optional)]
+      (->tupled-set client (.zrangeByScoreWithScores client key #^String min #^String max offset count)))))
 
 (defmulti zrevrange-by-score-with-scores (fn [key min max & optional] (map class [key min max])))
 (defmethod-r zrevrange-by-score-with-scores

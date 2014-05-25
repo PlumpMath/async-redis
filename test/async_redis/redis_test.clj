@@ -368,6 +368,7 @@
              (r/just (r/del! key))
              (r/just (r/zadd! key {1.0 val1 2.0 val2}))
              (is (= #{val1 val2} (<!! (r/zrange key 0 -1))))
+
              (r/just (r/zrem! key val1))
              (is (= 1 (<!! (r/zcard key))))
              (is (= #{val2} (<!! (r/zrange key 0 -1))))
@@ -378,10 +379,29 @@
              (r/just (r/del! key))
              (r/just (r/zadd! key {1.0 val1 2.0 val2}))
              (is (= #{val1 val2} (<!! (r/zrange key 0 -1))))
+
              (is (= 2 (<!! (r/zcount key 0.0 3.0))))
              (is (= 2 (<!! (r/zcount key "0.0" "3.0"))))
              (is (= 1 (<!! (r/zcount key 0.0 1.0))))
              (is (= 1 (<!! (r/zcount key "0.0" "1.0"))))
+             )
+
+    (testing "zrange-by-score"
+             (r/just (r/del! key))
+             (r/just (r/zadd! key {1.0 val1 2.0 val2}))
+             (is (= #{val1 val2} (<!! (r/zrange key 0 -1))))
+
+             (is (= #{val1 val2} (<!! (r/zrange-by-score key 0.0 2.0))))
+             (is (= #{val2} (<!! (r/zrange-by-score key 2.0 3.0))))
+
+             (is (= #{val1 val2} (<!! (r/zrevrange-by-score key 2.0 0.0))))
+             (is (= #{val2} (<!! (r/zrevrange-by-score key 3.0 2.0))))
+
+             (is (= #{[val1 1.0] [val2 2.0]} (<!! (r/zrange-by-score-with-scores key 0.0 2.0))))
+             (is (= #{[val2 2.0]} (<!! (r/zrange-by-score-with-scores key 2.0 3.0))))
+
+             (is (= #{[val1 1.0] [val2 2.0]} (<!! (r/zrevrange-by-score-with-scores key 2.0 0.0))))
+             (is (= #{[val2 2.0]} (<!! (r/zrevrange-by-score-with-scores key 3.0 2.0))))
              )
     )
   )
