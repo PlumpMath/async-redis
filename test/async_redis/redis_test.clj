@@ -234,9 +234,9 @@
 
 (deftest lists
   (let [key (random-string 20)
-        val1 (random-string 20)
-        val2 (random-string 20)
-        val3 (random-string 20)]
+        key2 (random-string 20)
+        val1 (random-string 10)
+        val2 (random-string 10)]
 
     (testing "rpush"
              (r/just (r/rpush! key val1))
@@ -257,6 +257,30 @@
     (testing "lset"
              (r/just (r/lset! key 0 val1))
              (is (= val1 (<!! (r/lindex key 0)))))
+
+    (testing "lrem"
+             (r/just (r/rpush! key val2 val2 val2)) ;; thrice
+             (is (= 4 (<!! (r/llen key))))
+             (r/just (r/lrem! key 1 val2))
+             (is (= 3 (<!! (r/llen key))))
+             (r/just (r/lrem! key 2 val2))
+             (is (= 1 (<!! (r/llen key)))))
+
+    (testing "popping"
+             (is (= val1 (<!! (r/lindex key 0))))
+             (is (= 1 (<!! (r/llen key))))
+             (is (= val1 (<!! (r/lpop! key))))
+             (is (= 0 (<!! (r/llen key))))
+             (r/just (r/rpush! key val1 val2))
+             (is (= val2 (<!! (r/rpop! key))))
+             (is (= 1 (<!! (r/llen key)))))
+
+    (testing "rpoplpush"
+             (is (= val1 (<!! (r/lindex key 0))))
+             (r/just (r/rpoplpush! key key2))
+             (is (= 0 (<!! (r/llen key))))
+             (is (= 1 (<!! (r/llen key2))))
+             (is (= val1 (<!! (r/lindex key2 0)))))
     )
   )
 
