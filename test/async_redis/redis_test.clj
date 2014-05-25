@@ -185,9 +185,17 @@
 (deftest hashes
   (let [key (random-string 20)
         hkey (random-string 10)
-        hval (random-string 10)]
+        hval (random-string 10)
+        hkey2 (random-string 10)
+        hval2 (random-string 10)]
+
     (r/just (r/hset! key hkey hval))
     (testing "hset/get" (is (= hval (<!! (r/hget key hkey)))))
+
+    (r/just (r/hsetnx! key hkey2 hval2))
+    (testing "hsetnx 1" (is (= hval2 (<!! (r/hget key hkey2)))))
+    (r/just (r/hsetnx! key hkey2 (random-string 10)))
+    (testing "hsetnx 2" (is (= hval2 (<!! (r/hget key hkey2)))))
     )
   )
 
