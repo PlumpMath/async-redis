@@ -309,16 +309,20 @@
 
 (defr hset! [key field value] (->int client (.hset client key field value)))
 (defr hget [key field] (->string client (.hget client key field)))
+(defr hget-int [key field] (->string>int client (.hget client key field)))
 (defr hsetnx! [key field value] (->int client (.hsetnx client key field value)))
-(defr hmset! [key hash] (->status client (.hmset client key hash)))
-(defr hmget [key & fields] (->status client (.hmget client key fields)))
-(defr hincr-by! [key field inc] (->int client (.hincrBy client key field inc)))
 (defr hexists? [key field] (->boolean client (.hexists client key field)))
-(defr hdel! [key & fields] (->int client (.hdel client key fields)))
+(defr hdel! [key & fields] (->int client (.hdel client key (into-array String fields))))
 (defr hlen [key] (->int client (.hlen client key)))
+
+(defr hincr-by! [key field inc] (->int client (.hincrBy client key field inc)))
+(defr hincr-by-float! [key field inc] (->double client (.hincrByFloat client key field inc)))
+
+(defr hmset! [key hash] (->status client (.hmset client key hash)))
+(defr hmget [key & fields] (->list client (.hmget client key (into-array String fields))))
 (defr hkeys [key] (->set client (.hkeys client key)))
 (defr hvals [key] (->list client (.hvals client key)))
-(defr hgetall [client key] (->map client (.hgetAll client key)))
+(defr hgetall [key] (->map client (.hgetAll client key)))
 
 (defr rpush! [key & strings] (->int client (.rpush client key strings)))
 (defr lpush! [key & strings] (->int client (.lpush client key strings)))
@@ -641,7 +645,6 @@
 (defr client-kill! [client-name] (->status client (.clientKill client client-name)))
 (defr client-setname! [name] (->status client (.clientSetname client name)))
 (defr migrate! [host port key dest-db timeout] (->status client (.migrate host port key dest-db timeout)))
-(defr hincr-by-float! [key field inc] (->double client (.hincrByFloat client key field inc)))
 
 ;; note: deliberately not doing special connection handling, as pubsub is special
 (defn subscribe [client jedis-pub-sub & channels]

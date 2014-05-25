@@ -197,6 +197,36 @@
     (r/just (r/hsetnx! key hkey2 (random-string 10)))
     (testing "hsetnx 2" (is (= hval2 (<!! (r/hget key hkey2)))))
     )
+
+  (let [key (random-string 20)
+        hash {"a" "foo"
+              "b" "bing"
+              "c" "bang"}]
+    (r/just (r/hmset! key hash))
+    (testing "hmset a" (is (= (get hash "a") (<!! (r/hget key "a")))))
+    (testing "hmset b" (is (= (get hash "b") (<!! (r/hget key "b")))))
+    (testing "hmset c" (is (= (get hash "c") (<!! (r/hget key "c")))))
+    (testing "hgetall" (is (= hash (<!! (r/hgetall key)))))
+    (testing "hkeys" (is (= (sort (seq (keys hash))) (sort (seq (<!! (r/hkeys key)))))))
+    (testing "hmget" (is (= (list "bing" "foo") (sort (seq (<!! (r/hmget key "a" "b")))))))
+
+    (testing "hexists 1" (is (= true (<!! (r/hexists? key "a")))))
+    (testing "hlen 1" (is (= 3 (<!! (r/hlen key)))))
+
+    (r/just (r/hdel! key "a"))
+    (testing "hexists 2" (is (= false (<!! (r/hexists? key "a")))))
+    (testing "hexists 3" (is (= true (<!! (r/hexists? key "b")))))
+    (testing "hdel" (is (= {"b" "bing" "c" "bang"} (<!! (r/hgetall key)))))
+    (testing "hlen 2" (is (= 2 (<!! (r/hlen key)))))
+    )
+
+  (let [key (random-string 20)
+        hkey (random-string 10)]
+    (r/just (r/hset! key hkey "1"))
+    (testing "hincr-by" (is (= 2 (<!! (r/hincr-by! key hkey 1)))))
+    (testing "hincr-by 2" (is (= 4 (<!! (r/hincr-by! key hkey 2)))))
+    (testing "just checking" (is (= 4 (<!! (r/hget-int key hkey)))))
+    )
   )
 
 (deftest concurrent-gets-dont-clobber
