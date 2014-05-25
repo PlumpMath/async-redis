@@ -458,7 +458,9 @@
           count (second optional)]
       (->tupled-set client (.zrevrangeByScoreWithScores client key #^String min #^String max offset count)))))
 
-(defr zremrange-by-rank [key start end] (->int client (.zremrangeByRank key start end)))
+(defr zremrange-by-rank [key start end] (->int client (.zremrangeByRank client key start end)))
+
+(def x&y 2)
 
 (defmulti zremrange-by-score (fn [key start end] (map class [key start end])))
 (defmethod-r zremrange-by-score
