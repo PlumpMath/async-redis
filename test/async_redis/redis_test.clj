@@ -286,11 +286,49 @@
 
 (deftest sets
   (let [key (random-string 20)
-        val (random-string 10)]
-    (testing "sadd"
-             (r/just (r/sadd! key val))
+        key1 (random-string 20)
+        key2 (random-string 20)
+        key3 (random-string 20)
+        val (random-string 10)
+        vals1 (take 20 (repeatedly #(random-string 10)))
+        vals2 (take 20 (repeatedly #(random-string 10)))]
+
+    (testing "set basics"
+             (r/just (r/sadd! key val val)) ;; deliberate dupe, to prove it's a set, just cuz
              (is (= 1 (<!! (r/scard key))))
              (is (= #{val} (<!! (r/smembers key))))
+             (is (= val (<!! (r/srandmember key)))) ;; only, lol
+             (r/just (r/srem! key val))
+             (is (= 0 (<!! (r/scard key))))
+             )
+
+    (testing "multi-set ops"
+             (r/just (apply r/sadd! (conj vals1 key1)))
+             (r/just (apply r/sadd! (conj vals2 key2)))
+             (is (= (count vals1) (<!! (r/scard key1))))
+             (is (= (count vals2) (<!! (r/scard key2))))
+             (r/just (r/smove! key1 key2 (first vals1)))
+             (is (= (- (count vals1) 1) (<!! (r/scard key1))))
+             (is (= (+ (count vals2) 1) (<!! (r/scard key2))))
+             (is (= 0 (count (<!! (r/sinter key1 key2)))))
+
+             (r/just (r/sadd! key1 (first vals2)))
+
+             (is (= #{(first vals2)} (<!! (r/sinter key1 key2))))
+             (r/just (r/sinterstore! key3 key1 key2))
+             (is (= #{(first vals2)} (<!! (r/smembers key3))))
+
+             (is (= (set (interleave vals1 vals2)) (<!! (r/sunion key1 key2))))
+             (r/just (r/sunionstore! key3 key1 key2))
+             (is (= (set (interleave vals1 vals2)) (<!! (r/smembers key3))))
+
+             (r/just (r/del! key1 key2))
+             (r/just (r/sadd! key1 (first vals1)))
+             (r/just (r/sadd! key1 (first vals2)))
+             (r/just (r/sadd! key2 (first vals2)))
+             (is (= #{(first vals1)} (<!! (r/sdiff key1 key2))))
+             (r/just (r/sdiffstore! key3 key1 key2))
+             (is (= #{(first vals1)} (<!! (r/smembers key3))))
              )
     )
   )
