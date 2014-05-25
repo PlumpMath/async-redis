@@ -336,7 +336,7 @@
 (defr rpop! [key] (->string client (.rpop client key)))
 (defr rpoplpush! [src-key dest-key] (->string client (.rpoplpush client src-key dest-key)))
 
-(defr sadd! [key & members] (->int client (.sadd client key members)))
+(defr sadd! [key & members] (->int client (.sadd client key (into-array String members))))
 (defr smembers [key] (->list>set client (.smembers client key)))
 (defr srem! [key & members] (->int client (.srem client key members)))
 (defr spop! [key] (->string client (.spop client key)))

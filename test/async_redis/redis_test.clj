@@ -284,6 +284,15 @@
     )
   )
 
+(deftest sets
+  (let [key (random-string 20)
+        val (random-string 10)]
+    (testing "sadd"
+             (r/just (r/sadd! key val))
+             (is (= 1 (<!! (r/scard key)))))
+    )
+  )
+
 (deftest concurrent-gets-dont-clobber
   (let [keys (take 100 (repeatedly #(random-string 20))),
         values (take 100 (repeatedly #(random-string 20)))]
