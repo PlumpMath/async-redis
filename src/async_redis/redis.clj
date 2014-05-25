@@ -458,47 +458,47 @@
           count (second optional)]
       (->tupled-set client (.zrevrangeByScoreWithScores client key #^String min #^String max offset count)))))
 
-(defr zremrange-by-rank [key start end] (->int client (.zremrangeByRank client key start end)))
+(defr zremrange-by-rank! [key start end] (->int client (.zremrangeByRank client key start end)))
 
-(defmulti zremrange-by-score (fn [key start end] (map class [key start end])))
-(defmethod-r zremrange-by-score
+(defmulti zremrange-by-score! (fn [key start end] (map class [key start end])))
+(defmethod-r zremrange-by-score!
   [String Long Long]
   zremrange-by-score-ints
   [key start end]
-  (zremrange-by-score key (double start) (double end)))
-(defmethod-r zremrange-by-score
+  (zremrange-by-score! key (double start) (double end)))
+(defmethod-r zremrange-by-score!
   [String Double Double]
   zremrange-by-score-doubles
   [key start end]
   (->int client (.zremrangeByScore client key #^Double start #^Double end)))
-(defmethod-r zremrange-by-score
+(defmethod-r zremrange-by-score!
   [String String String]
   zremrange-by-score-strings
   [key start end]
   (->int client (.zremrangeByScore client key #^String start #^String end)))
 
-(defmulti zunionstore (fn [dest-key & args] (class (first args))))
-(defmethod-r zunionstore
+(defmulti zunionstore! (fn [dest-key & args] (class (first args))))
+(defmethod-r zunionstore!
   String
   zunionstore-normal
   [dest-key & keys]
-  (->int client (.zunionstore client dest-key keys)))
-(defmethod-r zunionstore
+  (->int client (.zunionstore client dest-key (into-array String keys))))
+(defmethod-r zunionstore!
   redis.clients.jedis.ZParams
   zunionstore-with-params
-  [dest-key params & keys] (->int client (.zunionstore client dest-key params keys)))
+  [dest-key params & keys] (->int client (.zunionstore client dest-key params (into-array String keys))))
 
-(defmulti zinterstore (fn [dest-key & args] (class (first args))))
-(defmethod-r zinterstore
+(defmulti zinterstore! (fn [dest-key & args] (class (first args))))
+(defmethod-r zinterstore!
   String
   zinterstore-normal
   [dest-key & keys]
-  (->int client (.zinterstore client dest-key keys)))
-(defmethod-r zinterstore
+  (->int client (.zinterstore client dest-key (into-array String keys))))
+(defmethod-r zinterstore!
   redis.clients.jedis.ZParams
   zinterstore-with-params
   [dest-key params & keys]
-  (->int client (.zinterstore client dest-key params keys)))
+  (->int client (.zinterstore client dest-key params (into-array String keys))))
 
 (defr lpushx! [key & strings] (->int client (.lpushx client key strings)))
 (defr persist! [key] (->int client (.persist client key)))

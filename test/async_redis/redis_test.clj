@@ -337,6 +337,7 @@
 (deftest heaps
   (let [key (random-string 20)
         key2 (random-string 20)
+        key3 (random-string 20)
         val1 (random-string 10)
         val2 (random-string 10)
         vals1 (take 10 (repeatedly #(random-string 10)))
@@ -419,13 +420,13 @@
              (r/just (r/zadd! key {1.0 val1 2.0 val2}))
              (is (= #{val1 val2} (<!! (r/zrange key 0 -1))))
 
-             (r/just (r/zremrange-by-rank key 0 0))
+             (r/just (r/zremrange-by-rank! key 0 0))
              (is (= #{val2} (<!! (r/zrange key 0 -1))))
 
              (r/just (r/zadd! key {1.0 val1 2.0 val2}))
              (is (= #{val1 val2} (<!! (r/zrange key 0 -1))))
 
-             (r/just (r/zremrange-by-score key 0 1))
+             (r/just (r/zremrange-by-score! key 0 1))
              (is (= #{val2} (<!! (r/zrange key 0 -1))))
              )
 
@@ -434,6 +435,22 @@
              (r/just (r/del! key2))
              (r/just (r/zadd! key (zipmap scores1 vals1)))
              (r/just (r/zadd! key2 (zipmap scores2 vals2)))
+
+             (is (= (count vals1) (<!! (r/zcard key))))
+             (is (= (set vals1) (<!! (r/zrange key 0 -1))))
+             (is (= (count vals2) (<!! (r/zcard key2))))
+             (is (= (set vals2) (<!! (r/zrange key2 0 -1))))
+
+             (r/just (r/zunionstore! key3 key key2))
+             (is (= (+ (count vals1) (count vals2)) (<!! (r/zcard key3))))
+
+             (r/just (r/zinterstore! key3 key key2))
+             (is (= 0 (<!! (r/zcard key3))))
+
+             (r/just (r/zadd! key {(first scores2) (first vals2)}))
+
+             (r/just (r/zinterstore! key3 key key2))
+             (is (= 1 (<!! (r/zcard key3))))
              )
     )
   )
