@@ -380,6 +380,8 @@
              (is (= #{val1 val2} (<!! (r/zrange key 0 -1))))
              (is (= 2 (<!! (r/zcount key 0.0 3.0))))
              (is (= 2 (<!! (r/zcount key "0.0" "3.0"))))
+             (is (= 1 (<!! (r/zcount key 0.0 1.0))))
+             (is (= 1 (<!! (r/zcount key "0.0" "1.0"))))
              )
     )
   )

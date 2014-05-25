@@ -395,9 +395,9 @@
           count (second optional)]
       (->list>lset client (.zrangeByScore client key #^String min #^String max offset count)))))
 
-(defmulti zrange-by-score-with-scores (fn [key min max & optional] [key min max]))
+(defmulti zrange-by-score-with-scores (fn [key min max & optional] (map class [key min max])))
 (defmethod-r zrange-by-score-with-scores
-  [:String :Double :Double]
+  [String Double Double]
   zrange-by-score-with-score-doubles
   [key min max & optional]
   (if (empty? optional)
@@ -406,7 +406,7 @@
           count (second optional)]
       (->tupled-set client (.zrangeByScoreWithScores client key #^Double min #^Double max offset count)))))
 (defmethod-r zrange-by-score-with-scores
-  [:String :String :String]
+  [String String String]
   zrange-by-score-with-score-strings
   [key min max & optional]
   (if (empty? optional)
@@ -415,9 +415,9 @@
           count (second optional)]
       (->tupled-set client (.zrangeByScoreWithScores client key #^String min #^String max offset count)))))
 
-(defmulti zrevrange-by-score (fn [key min max & optional] [key min max]))
+(defmulti zrevrange-by-score (fn [key min max & optional] (map class [key min max])))
 (defmethod-r zrevrange-by-score
-  [:String :Double :Double]
+  [String Double Double]
   zrevrange-by-score-doubles
   [key min max & optional]
   (if (empty? optional)
@@ -426,7 +426,7 @@
           count (second optional)]
       (->list>lset client (.zrevrangeByScore client key #^Double min #^Double max offset count)))))
 (defmethod-r zrevrange-by-score
-  [:String :String :String]
+  [String String String]
   zrevrange-by-score-strings
   [key min max & optional]
   (if (empty? optional)
@@ -435,9 +435,9 @@
           count (second optional)]
       (->list>lset client (.zrevrangeByScore client key #^String min #^String max offset count)))))
 
-(defmulti zrevrange-by-score-with-scores (fn [key min max & optional] [key min max]))
+(defmulti zrevrange-by-score-with-scores (fn [key min max & optional] (map class [key min max])))
 (defmethod-r zrevrange-by-score-with-scores
-  [:String :Double :Double]
+  [String Double Double]
   zrevrange-by-score-with-score-doubles
   [key min max & optional]
   (if (empty? optional)
@@ -446,7 +446,7 @@
           count (second optional)]
       (->tupled-set client (.zrevrangeByScoreWithScores client key #^Double min #^Double max offset count)))))
 (defmethod-r zrevrange-by-score-with-scores
-  [:String :String :String]
+  [String String String]
   zrevrange-by-score-with-score-strings
   [key min max & optional]
   (if (empty? optional)
@@ -457,37 +457,37 @@
 
 (defr zremrange-by-rank [key start end] (->int client (.zremrangeByRank key start end)))
 
-(defmulti zremrange-by-score (fn [key start end] [key start end]))
+(defmulti zremrange-by-score (fn [key start end] (map class [key start end])))
 (defmethod-r zremrange-by-score
-  [:String :Double :Double]
+  [String Double Double]
   zremrange-by-score-doubles
   [key start end]
   (->int client (.zremrangeByScore client key #^Double start #^Double end)))
 (defmethod-r zremrange-by-score
-  [:String :String :String]
+  [String String String]
   zremrange-by-score-strings
   [key start end]
   (->int client (.zremrangeByScore client key #^String start #^String end)))
 
-(defmulti zunionstore (fn [dest-key & args] (first args)))
+(defmulti zunionstore (fn [dest-key & args] (class (first args))))
 (defmethod-r zunionstore
-  :String
+  String
   zunionstore-normal
   [dest-key & keys]
   (->int client (.zunionstore client dest-key keys)))
 (defmethod-r zunionstore
-  :redis.clients.jedis.ZParams
+  redis.clients.jedis.ZParams
   zunionstore-with-params
   [dest-key params & keys] (->int client (.zunionstore client dest-key params keys)))
 
-(defmulti zinterstore (fn [dest-key & args] (first args)))
+(defmulti zinterstore (fn [dest-key & args] (class (first args))))
 (defmethod-r zinterstore
-  :String
+  String
   zinterstore-normal
   [dest-key & keys]
   (->int client (.zinterstore client dest-key keys)))
 (defmethod-r zinterstore
-  :redis.clients.jedis.ZParams
+  redis.clients.jedis.ZParams
   zinterstore-with-params
   [dest-key params & keys]
   (->int client (.zinterstore client dest-key params keys)))
