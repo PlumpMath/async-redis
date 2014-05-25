@@ -208,6 +208,7 @@
     (testing "hmset c" (is (= (get hash "c") (<!! (r/hget key "c")))))
     (testing "hgetall" (is (= hash (<!! (r/hgetall key)))))
     (testing "hkeys" (is (= (sort (seq (keys hash))) (sort (seq (<!! (r/hkeys key)))))))
+    (testing "hvals" (is (= (sort (seq (vals hash))) (sort (seq (<!! (r/hvals key)))))))
     (testing "hmget" (is (= (list "bing" "foo") (sort (seq (<!! (r/hmget key "a" "b")))))))
 
     (testing "hexists 1" (is (= true (<!! (r/hexists? key "a")))))
