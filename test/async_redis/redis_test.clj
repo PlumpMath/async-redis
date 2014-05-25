@@ -183,8 +183,12 @@
     (is (= (count value1) (<!! (r/strlen key))))
     (r/just (r/append! key value2))
     (testing "appended" (is (= (str value1 value2) (<!! (r/get key)))))
-    (testing "substr start" (is (= value1 (<!! (r/substr key 0 (- (count value1) 1))))))
-    (testing "substr end" (is (= value2 (<!! (r/substr key (count value1) (+ (count value1) (count value2)))))))
+    (testing "substr and getrange"
+             (is (= value1 (<!! (r/substr key 0 (- (count value1) 1)))))
+             (is (= value2 (<!! (r/substr key (count value1) (+ (count value1) (count value2))))))
+             (is (= value1 (<!! (r/getrange key 0 (- (count value1) 1)))))
+             (is (= value2 (<!! (r/getrange key (count value1) (+ (count value1) (count value2))))))
+             )
     ))
 
 (deftest hashes

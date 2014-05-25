@@ -305,8 +305,10 @@
 (defr incr! [key] (->int client (.incr client key)))
 
 (defr append! [key value] (->int client (.append client key value)))
-(defr substr [key start end] (->string client (.substr client key start end)))
 (defr strlen [key] (->int client (.strlen client key)))
+(defr setrange! [key offset value] (->int client (.setrange client key offset value)))
+(defr substr [key start end] (->string client (.substr client key start end)))
+(defr getrange [key start-offset end-offset] (->string client (.getrange client key (long start-offset) (long end-offset))))
 
 (defr hset! [key field value] (->int client (.hset client key field value)))
 (defr hget [key field] (->string client (.hget client key field)))
@@ -532,8 +534,6 @@
   (->boolean client (.setbit client key offset #^String value)))
 
 (defr getbit [key offset] (->boolean client (.getbit client key offset)))
-(defr setrange! [key offset value] (->int client (.setrange client key offset value)))
-(defr getrange [key start-offset end-offset] (->string client (.getrange client key start-offset end-offset)))
 (defr config-get [pattern] (->list client (.configGet client pattern)))
 (defr config-set! [param val] (->status client (.configSet client param val)))
 
