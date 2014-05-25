@@ -44,6 +44,9 @@
     (testing "deletion"
              (r/just (r/del! key))
              (is (= false (<!! (r/exists? val)))))
+
+    (testing "echo"
+             (is (= "zingo" (<!! (r/echo "zingo")))))
     ))
 
 (deftest the-keys

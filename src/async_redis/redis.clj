@@ -505,8 +505,8 @@
   [dest-key params & keys]
   (->int client (.zinterstore client dest-key params (into-array String keys))))
 
-(defr echo [string] (->string (.echo client string)))
-(defr linsert! [key where pivot value] (->int (.linsert client key where pivot value)))
+(defr echo [string] (->string client (.echo client string)))
+(defr linsert! [key where pivot value] (->int client (.linsert client key where pivot value)))
 (defr brpoplpush! [source dest timeout] (->blocking:string client (.brpoplpush client source dest timeout)))
 
 (defr watch [& keys] (->status-multi client (.watch client (into-array String keys))))
