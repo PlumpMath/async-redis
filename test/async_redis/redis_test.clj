@@ -92,10 +92,14 @@
     (r/just (r/setex! key2 20 "1"))
     (testing "setex! is a shortcut" (is (> (<!! (r/ttl key2)) 0)))
 
-    (let [time (+ 30 (int (/ (System/currentTimeMillis) 1000)))]
-      (r/just (r/expire-at! key time))
-      (let [seconds-from-now (<!! (r/ttl key))]
-        (testing "expiration time goes through" (is (and (> seconds-from-now 5) (<= seconds-from-now 30))))))
+    (testing "expiration by time"
+             (let [time (+ 30 (int (/ (System/currentTimeMillis) 1000)))]
+               (r/just (r/expire-at! key time))
+               (let [seconds-from-now (<!! (r/ttl key))]
+                 (is (and (> seconds-from-now 5) (<= seconds-from-now 30)))
+                 (r/just (r/persist! key))
+                 (is (= -1 (<!! (r/ttl key))))
+                 )))
     )
   )
 
