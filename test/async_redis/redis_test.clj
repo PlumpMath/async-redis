@@ -359,6 +359,7 @@
              (is (= #{val1} (<!! (r/zrange key 0 0))))
              (is (= #{val2} (<!! (r/zrevrange key 0 0))))
              (is (= #{[val1 1.0]} (<!! (r/zrange-with-scores key 0 0))))
+             (is (= #{[val2 2.0]} (<!! (r/zrevrange-with-scores key 0 0))))
              )
 
     (testing "zrem"
