@@ -306,6 +306,7 @@
 
 (defr append! [key value] (->int client (.append client key value)))
 (defr substr [key start end] (->string client (.substr client key start end)))
+(defr strlen [key] (->int client (.strlen client key)))
 
 (defr hset! [key field value] (->int client (.hset client key field value)))
 (defr hget [key field] (->string client (.hget client key field)))
@@ -367,17 +368,6 @@
 (defr zrevrange-with-scores [key start end] (->tupled-set client (.zrevrangeWithScores client key start end)))
 (defr zcard [key] (->int client (.zcard client key)))
 (defr zscore [key member] (->double client (.zscore client key member)))
-(defr watch [& keys] (->status-multi client (.watch client (into-array String keys))))
-
-(defr sort [key] (->list client (.sort client key)))
-(defr sort-with-params [key sort-params](->list client (.sort client key #^SortParams sort-params)))
-(defr sort-into-dest! [key dest-key] (->int client (.sort client key #^String dest-key)))
-(defr sort-with-params-into-dest [key sort-params dest-key] (->int client (.sort client key sort-params dest-key)))
-
-(defr blpop! [& keys] (->blocking:list client (.blpop client keys)))
-(defr timeout-blpop! [timeout & keys] (->blocking:list client (.blpop client (conj keys (str timeout)))))
-
-(defr brpop! [& keys] (->blocking:list client (.brpop keys)))
 
 (defmulti zcount (fn [key min max] [key min max]))
 (defmethod-r zcount [:String :Double :Double]
@@ -502,7 +492,6 @@
   [dest-key params & keys]
   (->int client (.zinterstore client dest-key params keys)))
 
-(defr strlen [key] (->string client (.strlen client key)))
 (defr lpushx! [key & strings] (->int client (.lpushx client key strings)))
 (defr persist! [key] (->int client (.persist client key)))
 (defr rpushx! [key & strings] (->int (.rpushx client key strings)))
@@ -510,6 +499,17 @@
 (defr linsert! [key where pivot value] (->int (.linsert client key where pivot value)))
 (defr brpoplpush! [source dest timeout] (->blocking:string client (.brpoplpush client source dest timeout)))
 
+(defr watch [& keys] (->status-multi client (.watch client (into-array String keys))))
+
+(defr sort [key] (->list client (.sort client key)))
+(defr sort-with-params [key sort-params](->list client (.sort client key #^SortParams sort-params)))
+(defr sort-into-dest! [key dest-key] (->int client (.sort client key #^String dest-key)))
+(defr sort-with-params-into-dest [key sort-params dest-key] (->int client (.sort client key sort-params dest-key)))
+
+(defr blpop! [& keys] (->blocking:list client (.blpop client keys)))
+(defr timeout-blpop! [timeout & keys] (->blocking:list client (.blpop client (conj keys (str timeout)))))
+
+(defr brpop! [& keys] (->blocking:list client (.brpop keys)))
 
 (defmulti setbit! (fn [client offset value] value))
 (defmethod-r setbit!

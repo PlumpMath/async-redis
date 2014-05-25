@@ -176,6 +176,7 @@
         value2 (random-string 10)]
     (r/just (r/set! key value1))
     (testing "control" (is (= value1 (<!! (r/get key)))))
+    (is (= (count value1) (<!! (r/strlen key))))
     (r/just (r/append! key value2))
     (testing "appended" (is (= (str value1 value2) (<!! (r/get key)))))
     (testing "substr start" (is (= value1 (<!! (r/substr key 0 (- (count value1) 1))))))
