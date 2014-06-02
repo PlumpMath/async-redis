@@ -1,7 +1,7 @@
 (ns async-redis.redis-test
   (:import (clojure.core.async.impl.channels ManyToManyChannel))
   (:require [clojure.test :refer :all]
-            [clojure.core.async :as async :refer [<!!]]
+            [clojure.core.async :as async :refer [<!! chan <! go]]
             [async-redis.redis :as r]))
 
 (r/configure "127.0.0.1" 6379 :db 9)
@@ -333,14 +333,44 @@
 
 (deftest sorting
   (let [key (random-string 20)
+        key2 (random-string 20)
         vals ["1" "2" "3"]]
     (testing "sort"
              (r/just (apply (partial r/lpush! key) vals))
              (is (= (reverse vals) (<!! (r/lrange key 0 3))))
              (is (= vals (<!! (r/sort key))))
+
+             (r/just (r/sort-into-dest! key key2))
+             (is (= vals (<!! (r/lrange key2 0 3))))
              )
     )
   )
+
+(deftest blocking-stuff
+  (let [key (random-string 20)
+        val (random-string 10)
+        c (chan)]
+    (testing "blpop"
+             (r/just (r/lpush! key val))
+             (r/just (r/lpop! key))
+             (is (= [] (<!! (r/lrange key 0 -1))))
+
+             (go (let [values (<! (r/blpop! key))]
+                   (>! c (second values)))
+                 )
+             (r/just (r/lpush! key val))
+             (is (= val (<!! c))))
+    )
+  )
+
+(deftest watch
+  (let []))
+
+(deftest bits
+  (let []))
+
+(deftest config
+  (let []))
 
 (deftest sets
   (let [key (random-string 20)

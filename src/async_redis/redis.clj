@@ -509,19 +509,16 @@
   (->int client (.zinterstore client dest-key params (into-array String keys))))
 
 (defr echo [string] (->string client (.echo client string)))
-(defr brpoplpush! [source dest timeout] (->blocking:string client (.brpoplpush client source dest timeout)))
-
-(defr watch [& keys] (->status-multi client (.watch client (into-array String keys))))
 
 (defr sort [key] (->list client (.sort client key)))
-(defr sort-with-params [key sort-params](->list client (.sort client key #^SortParams sort-params)))
 (defr sort-into-dest! [key dest-key] (->int client (.sort client key #^String dest-key)))
-(defr sort-with-params-into-dest [key sort-params dest-key] (->int client (.sort client key sort-params dest-key)))
 
-(defr blpop! [& keys] (->blocking:list client (.blpop client keys)))
-(defr timeout-blpop! [timeout & keys] (->blocking:list client (.blpop client (conj keys (str timeout)))))
+(defr blpop! [& keys] (->blocking:list client (.blpop client (into-array String (reverse (conj keys "0"))))))
+(defr timeout-blpop! [timeout & keys] (->blocking:list client (.blpop client (into-array (conj keys (str timeout))))))
+(defr brpoplpush! [source dest timeout] (->blocking:string client (.brpoplpush client source dest timeout)))
+(defr brpop! [& keys] (->blocking:list client (.brpop client (into-array String keys))))
 
-(defr brpop! [& keys] (->blocking:list client (.brpop keys)))
+(defr watch [& keys] (->status-multi client (.watch client (into-array String keys))))
 
 (defmulti setbit! (fn [client offset value] value))
 (defmethod-r setbit!
