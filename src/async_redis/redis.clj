@@ -516,7 +516,7 @@
 (defr blpop! [& keys] (->blocking:list client (.blpop client (into-array String (reverse (conj keys "0"))))))
 (defr timeout-blpop! [timeout & keys] (->blocking:list client (.blpop client (into-array (conj keys (str timeout))))))
 (defr brpoplpush! [source dest timeout] (->blocking:string client (.brpoplpush client source dest timeout)))
-(defr brpop! [& keys] (->blocking:list client (.brpop client (into-array String keys))))
+(defr brpop! [& keys] (->blocking:list client (.brpop client (into-array String (reverse (conj keys "0"))))))
 
 (defr watch [& keys] (->status-multi client (.watch client (into-array String keys))))
 

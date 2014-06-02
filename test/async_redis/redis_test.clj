@@ -348,18 +348,44 @@
 
 (deftest blocking-stuff
   (let [key (random-string 20)
-        val (random-string 10)
+        val1 (random-string 10)
+        val2 (random-string 10)
         c (chan)]
+
     (testing "blpop"
-             (r/just (r/lpush! key val))
+             (r/just (r/del! key))
+             (r/just (r/lpush! key val1))
              (r/just (r/lpop! key))
              (is (= [] (<!! (r/lrange key 0 -1))))
 
-             (go (let [values (<! (r/blpop! key))]
-                   (>! c (second values)))
+             (go (let [key-and-value (<! (r/blpop! key))
+                       key-and-value2 (<! (r/blpop! key))]
+                   (>! c (second key-and-value))
+                   (>! c (second key-and-value2)))
                  )
-             (r/just (r/lpush! key val))
-             (is (= val (<!! c))))
+             (r/just (r/rpush! key val1))
+             (r/just (r/rpush! key val2))
+             (is (= val1 (<!! c)))
+             (is (= val2 (<!! c)))
+             )
+
+
+    (testing "brpop"
+             (r/just (r/del! key))
+             (r/just (r/lpush! key val1))
+             (r/just (r/lpop! key))
+             (is (= [] (<!! (r/lrange key 0 -1))))
+
+             (go (let [key-and-value (<! (r/brpop! key))
+                       key-and-value2 (<! (r/brpop! key))]
+                   (>! c (second key-and-value))
+                   (>! c (second key-and-value2)))
+                 )
+             (r/just (r/rpush! key val1))
+             (r/just (r/rpush! key val2))
+             (is (= val2 (<!! c)))
+             (is (= val1 (<!! c)))
+             )
     )
   )
 
