@@ -358,8 +358,8 @@
              (r/just (r/lpop! key))
              (is (= [] (<!! (r/lrange key 0 -1))))
 
-             (go (let [key-and-value (<! (r/blpop! key))
-                       key-and-value2 (<! (r/blpop! key))]
+             (go (let [key-and-value (<! (r/blpop! 0 key))
+                       key-and-value2 (<! (r/blpop! 0 key))]
                    (>! c (second key-and-value))
                    (>! c (second key-and-value2)))
                  )
@@ -368,7 +368,6 @@
              (is (= val1 (<!! c)))
              (is (= val2 (<!! c)))
              )
-
 
     (testing "brpop"
              (r/just (r/del! key))
@@ -376,8 +375,8 @@
              (r/just (r/lpop! key))
              (is (= [] (<!! (r/lrange key 0 -1))))
 
-             (go (let [key-and-value (<! (r/brpop! key))
-                       key-and-value2 (<! (r/brpop! key))]
+             (go (let [key-and-value (<! (r/brpop! 0 key))
+                       key-and-value2 (<! (r/brpop! 0 key))]
                    (>! c (second key-and-value))
                    (>! c (second key-and-value2)))
                  )
@@ -386,6 +385,7 @@
              (is (= val2 (<!! c)))
              (is (= val1 (<!! c)))
              )
+
     )
   )
 

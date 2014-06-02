@@ -513,10 +513,9 @@
 (defr sort [key] (->list client (.sort client key)))
 (defr sort-into-dest! [key dest-key] (->int client (.sort client key #^String dest-key)))
 
-(defr blpop! [& keys] (->blocking:list client (.blpop client (into-array String (reverse (conj keys "0"))))))
-(defr timeout-blpop! [timeout & keys] (->blocking:list client (.blpop client (into-array (conj keys (str timeout))))))
+(defr blpop! [timeout & keys] (->blocking:list client (.blpop client timeout (into-array String keys))))
 (defr brpoplpush! [source dest timeout] (->blocking:string client (.brpoplpush client source dest timeout)))
-(defr brpop! [& keys] (->blocking:list client (.brpop client (into-array String (reverse (conj keys "0"))))))
+(defr brpop! [timeout & keys] (->blocking:list client (.brpop client timeout (into-array String keys))))
 
 (defr watch [& keys] (->status-multi client (.watch client (into-array String keys))))
 
