@@ -60,9 +60,9 @@
   [& body]
   `(let [~'client (<conn)]
      (++client ~'client)
-     (let [ret# ((fn [] ~@body))]
-       (--client ~'client)
-       ret#)))
+     (try
+      ~@body
+      (finally (--client ~'client)))))
 
 (defmacro defr
   "Creates a function which checks out a connection to use for the scope of the function"
