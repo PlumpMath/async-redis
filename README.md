@@ -1,6 +1,6 @@
 # async-redis
 
-A Clojure library designed to ... well, that part is up to you.
+A Clojure library wrapping the Jedis client for Redis in a `core.async` interface.
 
 ## Usage
 
@@ -8,7 +8,6 @@ FIXME
 
 ## License
 
-Copyright © 2013 FIXME
+Copyright © 2013 Kiril Savino
 
-Distributed under the Eclipse Public License either version 1.0 or (at
-your option) any later version.
+Distributed under the MIT License.
