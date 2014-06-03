@@ -425,7 +425,13 @@
     ))
 
 (deftest config
-  (let []))
+  (testing "config"
+           (is (= ["timeout" "0"] (<!! (r/config-get "timeout"))))
+           (r/just (r/config-set! "timeout" "1"))
+           (is (= ["timeout" "1"] (<!! (r/config-get "timeout"))))
+           (r/just (r/config-set! "timeout" "0"))
+           )
+  )
 
 (deftest eval
   (let []))

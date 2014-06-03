@@ -532,6 +532,7 @@
   (->boolean client (.setbit client key offset #^String value)))
 
 (defr getbit [key offset] (->boolean client (.getbit client key offset)))
+
 (defr config-get [pattern] (->list client (.configGet client pattern)))
 (defr config-set! [param val] (->status client (.configSet client param val)))
 
