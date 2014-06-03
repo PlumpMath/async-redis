@@ -415,9 +415,19 @@
   (let []))
 
 (deftest bits
-  (let []))
+  (let [key (random-string 20)]
+    (testing "setbit"
+             (r/just (r/setbit! key 7 true))
+             (is (= true (<!! (r/getbit key 7))))
+             (r/just (r/setbit! key 7 false))
+             (is (= false (<!! (r/getbit key 7))))
+             )
+    ))
 
 (deftest config
+  (let []))
+
+(deftest eval
   (let []))
 
 (deftest sets

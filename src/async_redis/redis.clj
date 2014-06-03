@@ -519,16 +519,16 @@
 
 (defr watch [& keys] (->status-multi client (.watch client (into-array String keys))))
 
-(defmulti setbit! (fn [client offset value] value))
+(defmulti setbit! (fn [key offset value] (class value)))
 (defmethod-r setbit!
-  :Boolean
+  Boolean
   setbit-bool
-  [offset value]
+  [key offset value]
   (->boolean client (.setbit client key offset #^Boolean value)))
 (defmethod-r setbit!
-  :String
+  String
   setbit-bool
-  [offset value]
+  [key offset value]
   (->boolean client (.setbit client key offset #^String value)))
 
 (defr getbit [key offset] (->boolean client (.getbit client key offset)))
