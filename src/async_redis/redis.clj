@@ -1,12 +1,16 @@
 (ns async-redis.redis
   (:refer-clojure :exclude [get type keys set sort eval])
   (:import (java.net.URI)
-           (java.util HashSet HashMap LinkedHashSet)
-           (redis.clients.jedis Client BinaryClient BinaryClient$LIST_POSITION JedisPubSub BuilderFactory
-                                Tuple SortingParams Protocol JedisPool)
+           (java.util HashSet HashMap LinkedHashSet Arrays)
+           (redis.clients.jedis Client
+                                BinaryClient BinaryClient$LIST_POSITION
+                                JedisPubSub BuilderFactory
+                                Tuple SortingParams
+                                Protocol Protocol$Keyword)
            (redis.clients.util SafeEncoder Slowlog)
            (redis.clients.jedis.exceptions JedisDataException))
-  (:require [clojure.core.async :as async :refer [go >! <! <!! >!! chan go-loop]]))
+  (:require [clojure.core.async :as async :refer [go >! <! <!! >!! chan go-loop
+                                                  mult tap untap]]))
 
 (def LIST_BEFORE BinaryClient$LIST_POSITION/BEFORE)
 (def LIST_AFTER BinaryClient$LIST_POSITION/AFTER)
@@ -653,23 +657,114 @@
 (defr client-setname! [name] (->status client (.clientSetname client name)))
 (defr migrate! [host port key dest-db timeout] (->status client (.migrate host port key dest-db timeout)))
 
-;; note: deliberately not doing special connection handling, as pubsub is special
-(defn subscribe [client jedis-pub-sub & channels]
-  (with-chan client
-             (fn []
-               (.setTimeoutInfinite client)
-               (.proceed jedis-pub-sub client channels)
-               (.rollbackTimeout client))))
-
-(defn publish [client channel message] (->int client (.publish client channel message)))
-
-(defn psubscribe [client jedis-pub-sub & patterns]
-  (with-chan client
-             #(non-multi client
-                         (.setTimeoutInfinite client)
-                         (.proceedWithPatterns jedis-pub-sub client patterns)
-                         (.rollbackTimeout client))))
 
 (defmacro just [statement] `(<!! ~statement))
 
+;; publish is normal
+(defr publish [channel message] (->int client (.publish client channel message)))
 
+;; the rest of pubsub is crazy
+
+
+(def ^{:private true} *pubsub-bus {:subscribe (mult (chan 100))
+                                   :unsubscribe (mult (chan 100))
+                                   :psubscribe (mult (chan 100))
+                                   :punsubscribe (mult (chan 100))
+                                   :message (mult (chan 100))
+                                   :pmessage (mult (chan 100))})
+
+(def ^{:private true} *pubsub-client (ref nil))
+
+(defn ^{:private true} bytes->string [b]
+  (if (nil? b) b (SafeEncoder/encode b)))
+
+(defn ^{:private true} channelCount [response] (.intValue (.get response 2)))
+
+(defn ^{:private true} is-command? [string-command bytes]
+  (Arrays/equals (. string-command raw) bytes))
+
+(def SUBSCRIBE Protocol$Keyword/SUBSCRIBE)
+(def UNSUBSCRIBE Protocol$Keyword/UNSUBSCRIBE)
+(def PSUBSCRIBE Protocol$Keyword/PSUBSCRIBE)
+(def PUNSUBSCRIBE Protocol$Keyword/PUNSUBSCRIBE)
+(def MESSAGE Protocol$Keyword/MESSAGE)
+(def PMESSAGE Protocol$Keyword/PMESSAGE)
+
+(defn pubsub-process [client onMessage onSubscribe onUnsubscribe]
+  (loop [response (.getObjectMultiBulkReply client)]
+    (let [command (.get response 0)]
+      (assert (instance? (Class/forName "[B") command))
+
+      (cond
+       (is-command? SUBSCRIBE command)
+       (let [channels (channelCount response)]
+         (>!! (*pubsub-bus :subscribe) {:count channels
+                                        :channel (bytes->string (.get response 1))})
+         (recur (.getObjectMultiBulkReply client)))
+
+       (is-command? PSUBSCRIBE command)
+       (let [channels (channelCount response)]
+         (>!! (*pubsub-bus :psubscribe) {:count channels
+                                         :pattern (bytes->string (.get response 1))})
+         (if (> channels 0)
+           (recur (.getObjectMultiBulkReply client))))
+
+       (is-command? UNSUBSCRIBE command)
+       (let [channels (channelCount response)]
+         (>!! (*pubsub-bus :unsubscribe) {:count channels
+                                          :channel (bytes->string (.get response 1))})
+         (if (> channels 0)
+           (recur (.getObjectMultiBulkReply client))))
+
+       (is-command? PUNSUBSCRIBE command)
+       (let [channels (channelCount response)]
+         (>!! (*pubsub-bus :punsubscribe) {:count channels
+                                           :pattern (bytes->string (.get response 1))})
+         (recur (.getObjectMultiBulkReply client)))
+
+       (is-command? MESSAGE command)
+       (let []
+         (>!! (*pubsub-bus :message) {:channel (bytes->string (.get response 1))
+                                      :message (bytes->string (.get response 2))})
+         (recur (.getObjectMultiBulkReply client)))
+
+       (is-command? PMESSAGE command)
+       (let []
+         (>!! (*pubsub-bus :pmessage) {:pattern (bytes->string (.get response 1))
+                                       :channel (bytes->string (.get response 2))
+                                       :message (bytes->string (.get response 3))})
+         (recur (.getObjectMultiBulkReply client))
+       )))))
+
+(defn ^{:private true} pubsub-init []
+  (dosync
+   (when (nil? (deref *pubsub-client))
+     (let [client (connect)]
+       (ref-set *pubsub-client client)
+       (.setTimeoutInfinite client)
+       (go (pubsub-process client)
+           (.rollbackTimeout client))))))
+
+(defn subscribe [& channels]
+  (pubsub-init)
+  (.subscribe (deref *pubsub-client) (into-array String channels)))
+
+(defn psubscribe [& patterns]
+  (pubsub-init)
+  (.subscribe (deref *pubsub-client) (into-array String patterns)))
+
+(defn unsubscribe []
+  (pubsub-init)
+  (.unsubscribe (deref *pubsub-client)))
+
+(defn punsubscribe []
+  (pubsub-init)
+  (.punsubscribe (deref *pubsub-client)))
+
+(defn get-listener-chan [message-type]
+  (let [c (chan)]
+    (tap (*pubsub-client message-type) c)
+    c))
+
+(defn release-listener-chan [message-type c]
+  (untap (*pubsub-client message-type) c))

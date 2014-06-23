@@ -436,6 +436,12 @@
 (deftest eval
   (let []))
 
+(deftest pubsub
+  (let [channel (random-string 20)]
+    ;; (pubsub:on "message" on-message)
+    )
+  )
+
 (deftest sets
   (let [key (random-string 20)
         key1 (random-string 20)
