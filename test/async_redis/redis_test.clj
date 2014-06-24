@@ -448,6 +448,11 @@
              (is (= {:message value :channel channel-name}
                     (<!! message-chan)))
              )
+
+    (testing "releasing stuff..."
+             (r/stop-listening-for :subscribe subscribe-chan)
+             (r/stop-listening-for :message message-chan)
+             )
     ))
 
 (deftest sets
