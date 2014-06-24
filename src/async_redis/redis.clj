@@ -666,12 +666,19 @@
 ;; the rest of pubsub is crazy
 
 
-(def ^{:private true} *pubsub-bus {:subscribe (mult (chan 100))
-                                   :unsubscribe (mult (chan 100))
-                                   :psubscribe (mult (chan 100))
-                                   :punsubscribe (mult (chan 100))
-                                   :message (mult (chan 100))
-                                   :pmessage (mult (chan 100))})
+(def ^{:private true} *pubsub-chans {:subscribe (chan 100)
+                                     :unsubscribe (chan 100)
+                                     :psubscribe (chan 100)
+                                     :punsubscribe (chan 100)
+                                     :message (chan 100)
+                                     :pmessage (chan 100)})
+
+(def ^{:private true} *pubsub-mults {:subscribe (mult (*pubsub-chans :subscribe))
+                                     :unsubscribe (mult (*pubsub-chans :unsubscribe))
+                                     :psubscribe (mult (*pubsub-chans :psubscribe))
+                                     :punsubscribe (mult (*pubsub-chans :punsubscribe))
+                                     :message (mult (*pubsub-chans :message))
+                                     :pmessage (mult (*pubsub-chans :pmessage))})
 
 (def ^{:private true} *pubsub-client (ref nil))
 
@@ -690,7 +697,7 @@
 (def MESSAGE Protocol$Keyword/MESSAGE)
 (def PMESSAGE Protocol$Keyword/PMESSAGE)
 
-(defn pubsub-process [client onMessage onSubscribe onUnsubscribe]
+(defn pubsub-process [client]
   (loop [response (.getObjectMultiBulkReply client)]
     (let [command (.get response 0)]
       (assert (instance? (Class/forName "[B") command))
@@ -698,43 +705,44 @@
       (cond
        (is-command? SUBSCRIBE command)
        (let [channels (channelCount response)]
-         (>!! (*pubsub-bus :subscribe) {:count channels
-                                        :channel (bytes->string (.get response 1))})
+         (>!! (*pubsub-chans :subscribe) {:count channels
+                                          :channel (bytes->string (.get response 1))})
          (recur (.getObjectMultiBulkReply client)))
 
        (is-command? PSUBSCRIBE command)
        (let [channels (channelCount response)]
-         (>!! (*pubsub-bus :psubscribe) {:count channels
-                                         :pattern (bytes->string (.get response 1))})
+         (>!! (*pubsub-chans :psubscribe) {:count channels
+                                           :pattern (bytes->string (.get response 1))})
          (if (> channels 0)
            (recur (.getObjectMultiBulkReply client))))
 
        (is-command? UNSUBSCRIBE command)
        (let [channels (channelCount response)]
-         (>!! (*pubsub-bus :unsubscribe) {:count channels
-                                          :channel (bytes->string (.get response 1))})
+         (>!! (*pubsub-chans :unsubscribe) {:count channels
+                                            :channel (bytes->string (.get response 1))})
          (if (> channels 0)
            (recur (.getObjectMultiBulkReply client))))
 
        (is-command? PUNSUBSCRIBE command)
        (let [channels (channelCount response)]
-         (>!! (*pubsub-bus :punsubscribe) {:count channels
-                                           :pattern (bytes->string (.get response 1))})
+         (>!! (*pubsub-chans :punsubscribe) {:count channels
+                                             :pattern (bytes->string (.get response 1))})
          (recur (.getObjectMultiBulkReply client)))
 
        (is-command? MESSAGE command)
        (let []
-         (>!! (*pubsub-bus :message) {:channel (bytes->string (.get response 1))
-                                      :message (bytes->string (.get response 2))})
+         (>!! (*pubsub-chans :message) {:channel (bytes->string (.get response 1))
+                                        :message (bytes->string (.get response 2))})
          (recur (.getObjectMultiBulkReply client)))
 
        (is-command? PMESSAGE command)
        (let []
-         (>!! (*pubsub-bus :pmessage) {:pattern (bytes->string (.get response 1))
-                                       :channel (bytes->string (.get response 2))
-                                       :message (bytes->string (.get response 3))})
+         (>!! (*pubsub-chans :pmessage) {:pattern (bytes->string (.get response 1))
+                                         :channel (bytes->string (.get response 2))
+                                         :message (bytes->string (.get response 3))})
          (recur (.getObjectMultiBulkReply client))
        )))))
+
 
 (defn ^{:private true} pubsub-init []
   (dosync
@@ -761,10 +769,10 @@
   (pubsub-init)
   (.punsubscribe (deref *pubsub-client)))
 
-(defn get-listener-chan [message-type]
-  (let [c (chan)]
-    (tap (*pubsub-client message-type) c)
+(defn listen-for [message-type]
+  (let [c (chan 100)]
+    (tap (*pubsub-mults message-type) c)
     c))
 
-(defn release-listener-chan [message-type c]
-  (untap (*pubsub-client message-type) c))
+(defn stop-listening-for [message-type c]
+  (untap (*pubsub-mults message-type) c))

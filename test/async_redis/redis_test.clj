@@ -437,10 +437,18 @@
   (let []))
 
 (deftest pubsub
-  (let [channel (random-string 20)]
-    ;; (pubsub:on "message" on-message)
-    )
-  )
+  (let [channel-name (random-string 20)
+        value (random-string 20)
+        subscribe-chan (r/listen-for :subscribe)
+        message-chan (r/listen-for :message)]
+    (testing "pubsub simple message"
+             (r/subscribe channel-name)
+             (is (= channel-name ((<!! subscribe-chan) :channel)))
+             (r/publish channel-name value)
+             (is (= {:message value :channel channel-name}
+                    (<!! message-chan)))
+             )
+    ))
 
 (deftest sets
   (let [key (random-string 20)
