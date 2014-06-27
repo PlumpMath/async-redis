@@ -1,4 +1,4 @@
-(defproject org.clojars.kiril/async-redis "0.1.1-SNAPSHOT"
+(defproject org.clojars.kiril/async-redis "0.1.2"
   :description "a core.async wrapper for the Redis driver Jedis"
   :url "http://github.com/kiril/async-redis"
   :license {:name "MIT License"
